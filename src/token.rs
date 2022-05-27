@@ -1,0 +1,37 @@
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub enum Token {
+    Great,
+    DoubleGreat,
+    OneGreatAmpersand,
+    GreatAmpersand,
+    TwoGreatAmpersand,
+    Less,
+    DoubleLess,
+    Ampersand,
+    Pipe,
+
+    Pwd,
+    Cd,
+    Ls,
+    Cp,
+    Mv,
+    Mkdir,
+    Rmdir,
+    Rm,
+    Touch,
+    Locate,
+    Find,
+    Grep,
+    Kill,
+    Ping,
+    History,
+    Man,
+    Echo,
+
+    Option(String),
+    Argument(String),
+    Unknown,
+    Whitespace,
+
+    EOF,
+}
