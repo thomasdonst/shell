@@ -14,14 +14,6 @@ impl<'input> Lexer<'input> {
         }
     }
 
-    fn next_char(&mut self) -> Option<char> {
-        self.input.next()
-    }
-
-    fn peek(&mut self) -> Option<char> {
-        self.input.peek().cloned()
-    }
-
     pub fn get_all_tokens(&mut self) -> Vec<Token> {
         let mut tokens = Vec::<Token>::new();
         loop {
@@ -32,6 +24,26 @@ impl<'input> Lexer<'input> {
             tokens.push(token.clone());
         }
         tokens
+    }
+
+    fn next_char(&mut self) -> Option<char> {
+        self.input.next()
+    }
+
+    fn next_word(&mut self, init: String) -> String {
+        let mut res = String::from(init);
+        while let Some(c) = self.peek() {
+            if !c.is_whitespace() {
+                res.push(self.next_char().unwrap())
+            } else {
+                break;
+            }
+        }
+        res
+    }
+
+    fn peek(&mut self) -> Option<char> {
+        self.input.peek().cloned()
     }
 
     fn next(&mut self) -> Token {
@@ -69,26 +81,12 @@ impl<'input> Lexer<'input> {
             Some('|') => Token::Pipe,
 
             Some('-') => {
-                let mut res = String::from("");
-                while let Some(c) = self.peek() {
-                    if is_ident_member(c) {
-                        res.push(self.next_char().unwrap())
-                    } else {
-                        break;
-                    }
-                }
+                let res = self.next_word("".to_string());
                 Token::Option(res)
             }
 
             Some(c) => {
-                let mut res = c.to_string();
-                while let Some(c) = self.peek() {
-                    if !c.is_whitespace() {
-                        res.push(self.next_char().unwrap())
-                    } else {
-                        break;
-                    }
-                }
+                let res = self.next_word(c.to_string());
                 match res.as_str() {
                     "pwd" => Token::Pwd,
                     "cd" => Token::Cd,
@@ -107,6 +105,7 @@ impl<'input> Lexer<'input> {
                     "history" => Token::History,
                     "man" => Token::Man,
                     "echo" => Token::Echo,
+                    "sort" => Token::Sort,
                     _ => Token::Argument(res)
                 }
             }
@@ -116,24 +115,3 @@ impl<'input> Lexer<'input> {
         token
     }
 }
-
-fn is_ident_member(c: char) -> bool {
-    match c {
-        'a'..='z' => true,
-        'A'..='Z' => true,
-        '0'..='9' => true,
-        '_' => true,
-        _ => false,
-    }
-}
-
-
-
-
-
-
-
-
-
-
-

@@ -27,6 +27,7 @@ pub enum Token {
     History,
     Man,
     Echo,
+    Sort,
 
     Option(String),
     Argument(String),
