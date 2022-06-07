@@ -1,38 +1,28 @@
+use std::fmt;
+use crate::parser::Cmd;
+
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum Token {
     Great,
     DoubleGreat,
-    OneGreatAmpersand,
     GreatAmpersand,
-    TwoGreatAmpersand,
     Less,
     DoubleLess,
     Ampersand,
     Pipe,
+    Equal,
+    DoubleQuote,
 
-    Pwd,
-    Cd,
-    Ls,
-    Cp,
-    Mv,
-    Mkdir,
-    Rmdir,
-    Rm,
-    Touch,
-    Locate,
-    Find,
-    Grep,
-    Kill,
-    Ping,
-    History,
-    Man,
-    Echo,
-    Sort,
-
-    Option(String),
+    Command(Cmd),
     Argument(String),
-    Unknown,
+    Option(String),
+    EnvVariable(String),
     Whitespace,
+    Eof
+}
 
-    EOF,
+impl fmt::Display for Token {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
 }

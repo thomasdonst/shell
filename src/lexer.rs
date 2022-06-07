@@ -1,6 +1,6 @@
 use std::iter::Peekable;
 use std::str::Chars;
-use log::debug;
+use crate::parser::Cmd::*;
 use crate::token::Token;
 
 pub struct Lexer<'input> {
@@ -8,21 +8,15 @@ pub struct Lexer<'input> {
 }
 
 impl<'input> Lexer<'input> {
-    pub fn new(input: &'input str) -> Self {
-        Self {
+    pub fn new(input: &'input str) -> Lexer {
+        Lexer {
             input: input.chars().peekable()
         }
     }
 
     pub fn get_all_tokens(&mut self) -> Vec<Token> {
         let mut tokens = Vec::<Token>::new();
-        loop {
-            let token = self.next();
-            if token == Token::EOF {
-                break;
-            }
-            tokens.push(token.clone());
-        }
+        self.for_each(|token| tokens.push(token));
         tokens
     }
 
@@ -31,9 +25,9 @@ impl<'input> Lexer<'input> {
     }
 
     fn next_word(&mut self, init: String) -> String {
-        let mut res = String::from(init);
+        let mut res = init;
         while let Some(c) = self.peek() {
-            if !c.is_whitespace() {
+            if self.is_word_member(c) {
                 res.push(self.next_char().unwrap())
             } else {
                 break;
@@ -42,76 +36,83 @@ impl<'input> Lexer<'input> {
         res
     }
 
+    fn is_word_member(&self, c: char) -> bool {
+        !matches!(c, ' ' | '>' | '<' | '&' | '|' | '=' | '"' | '$' | '-')
+    }
+
     fn peek(&mut self) -> Option<char> {
         self.input.peek().cloned()
     }
 
-    fn next(&mut self) -> Token {
-        let token = match self.next_char() {
-            None => Token::EOF,
-
-            Some(' ') => {
-                while self.peek() == Some(' ') {
-                    self.input.next();
-                }
-                Token::Whitespace
+    fn consume_whitespace(&mut self) {
+        while let Some(c) = self.peek() {
+            if c.is_whitespace() {
+                self.next_char();
+            } else {
+                break;
             }
+        }
+    }
+}
 
+impl<'input> Iterator for Lexer<'input> {
+    type Item = Token;
+
+    fn next(&mut self) -> Option<Token> {
+        let token = match self.next_char() {
             Some('>') =>
                 if self.peek() == Some('>') {
                     self.input.next();
-                    Token::DoubleGreat
+                    Some(Token::DoubleGreat)
                 } else if self.peek() == Some('&') {
                     self.input.next();
-                    Token::GreatAmpersand
+                    Some(Token::GreatAmpersand)
                 } else {
-                    Token::Great
+                    Some(Token::Great)
                 },
 
             Some('<') =>
                 if self.peek() == Some('<') {
                     self.input.next();
-                    Token::DoubleLess
+                    Some(Token::DoubleLess)
                 } else {
-                    Token::Less
+                    Some(Token::Less)
                 }
 
-            Some('&') => Token::Ampersand,
+            Some('&') => Some(Token::Ampersand),
 
-            Some('|') => Token::Pipe,
+            Some('|') => Some(Token::Pipe),
+
+            Some('=') => Some(Token::Equal),
+
+            Some('"') => Some(Token::DoubleQuote),
+
+            Some('$') => {
+                let res = self.next_word("".to_string());
+                Some(Token::EnvVariable(res))
+            }
 
             Some('-') => {
-                let res = self.next_word("".to_string());
-                Token::Option(res)
+                let option = self.next_word("".to_string());
+                Some(Token::Option(option))
             }
 
             Some(c) => {
-                let res = self.next_word(c.to_string());
-                match res.as_str() {
-                    "pwd" => Token::Pwd,
-                    "cd" => Token::Cd,
-                    "ls" => Token::Ls,
-                    "cp" => Token::Cp,
-                    "mv" => Token::Mv,
-                    "mkdir" => Token::Mkdir,
-                    "rmdir" => Token::Rmdir,
-                    "rm" => Token::Rm,
-                    "touch" => Token::Touch,
-                    "locate" => Token::Locate,
-                    "find" => Token::Find,
-                    "grep" => Token::Grep,
-                    "kill" => Token::Kill,
-                    "ping" => Token::Ping,
-                    "history" => Token::History,
-                    "man" => Token::Man,
-                    "echo" => Token::Echo,
-                    "sort" => Token::Sort,
-                    _ => Token::Argument(res)
+                let word = self.next_word(c.to_string());
+                match word.to_lowercase().as_str() {
+                    "cat" => Some(Token::Command(Cat)),
+                    "pwd" => Some(Token::Command(Pwd)),
+                    "cd" => Some(Token::Command(Cd)),
+                    "ls" => Some(Token::Command(Ls)),
+                    "cp" => Some(Token::Command(Cp)),
+                    "mv" => Some(Token::Command(Mv)),
+                    _ => Some(Token::Argument(word))
                 }
             }
-        };
 
-        debug!("token: {:?}", token);
+            None => None
+        };
+        self.consume_whitespace();
         token
     }
 }

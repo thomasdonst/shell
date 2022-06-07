@@ -4,9 +4,6 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-log = "0.4.17"
-execute = "0.2.11" # remove later
-shells = "0.2.0" # remove later
 
 [dev-dependencies]
 pretty_assertions = "0.7.2"
