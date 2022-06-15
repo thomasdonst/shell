@@ -3,7 +3,7 @@ use std::env;
 use std::fs::File;
 use std::io::{Error, Read};
 use std::path::Path;
-use crate::parser::{Cmd, Expr};
+use crate::ast::{Arg, Cmd, Expr};
 
 pub struct Interpreter {
     stdin: Option<String>,
@@ -20,36 +20,29 @@ impl Interpreter {
         }
     }
 
-    pub fn eval(&mut self, node: &Expr) -> String {
+    pub fn eval(&mut self, ast: &Expr) -> String {
+        self.eval_binary(ast);
+        self.get_result()
+    }
+
+    fn eval_binary(&mut self, node: &Expr) {
         match node {
             Expr::Pipe { left, right } => {
-                self.eval(left);
+                self.eval_binary(left);
                 self.pipe();
-                self.eval(right)
+                self.eval_binary(right);
             }
             Expr::Cmd { ty, options, arguments } => {
-                match self.execute(ty, options, arguments) {
-                    Ok(s) => {
-                        self.stdout = Some(s);
-                        self.stderr = None;
-                    }
-                    Err(e) => {
-                        self.stdout = None;
-                        self.stderr = Some(e.to_string());
-                    }
-                }
-                String::from("")
+                self.execute(ty, options, arguments);
             }
-        };
-
-        self.get_result()
+        }
     }
 
     fn get_result(&self) -> String {
         match (self.stdout.clone(), self.stderr.clone()) {
             (Some(stdout), None) => stdout,
             (None, Some(stderr)) => stderr,
-            (Some(stdout), Some(stderr)) => format!("{}\r\n{}", stdout, stderr),
+            (Some(stdout), Some(stderr)) => stdout + "\r\n" + &stderr,
             (None, None) => String::from("stdout and stderr are none")
         }
     }
@@ -59,26 +52,36 @@ impl Interpreter {
         self.stdout = None;
     }
 
-    fn execute(&self, ty: &Cmd, options: &Vec<char>, arguments: &Vec<String>) -> Result<String, Error> {
-        match ty {
+    fn execute(&mut self, ty: &Cmd, options: &Vec<String>, arguments: &Vec<Arg>) {
+        let result = match ty {
             Cmd::Cat => self.execute_cat(options, arguments),
             Cmd::Pwd => self.execute_pwd(options),
             Cmd::Cd => self.execute_cd(options, arguments),
             Cmd::Ls => self.execute_ls(options, arguments),
             Cmd::Cp => self.execute_cp(options, arguments),
             Cmd::Mv => self.execute_mv(options, arguments)
+        };
+
+        match &result {
+            Ok(s) => {
+                self.stdout = Some(s.clone());
+                self.stderr = None;
+            }
+            Err(e) => {
+                self.stdout = None;
+                self.stderr = Some(e.to_string());
+            }
         }
     }
 
-    fn execute_cat(&self, _options: &Vec<char>, arguments: &Vec<String>) -> Result<String, Error> {
-        let arguments = &self.extend_arguments(arguments.clone());
+    fn execute_cat(&self, _options: &Vec<String>, arguments: &Vec<Arg>) -> Result<String, Error> {
+        let arguments = self.replace_args_with_stdin(arguments);
 
         let mut result = String::from("");
         let mut args_iter = arguments.iter();
-        let current_dir = env::current_dir().unwrap().display().to_string();
 
-        while let Some(filename) = args_iter.next() {
-            let mut file = File::open(current_dir.clone() + "\\" + filename)?;
+        while let Some(Arg::File(filename)) = args_iter.next() {
+            let mut file = File::open(".\\".to_string() + filename)?;
             let mut contents = String::new();
             file.read_to_string(&mut contents)?;
             result.push_str(format!("{}\n", contents).as_str());
@@ -91,14 +94,14 @@ impl Interpreter {
         Ok(result)
     }
 
-    fn execute_pwd(&self, _options: &Vec<char>) -> Result<String, Error> {
+    fn execute_pwd(&self, _options: &Vec<String>) -> Result<String, Error> {
         Ok(env::current_dir().unwrap().display().to_string())
     }
 
-    fn execute_cd(&self, _options: &Vec<char>, arguments: &Vec<String>) -> Result<String, Error> {
-        let arguments = &self.extend_arguments(arguments.clone());
+    fn execute_cd(&self, _options: &Vec<String>, arguments: &Vec<Arg>) -> Result<String, Error> {
+        let arguments = self.replace_args_with_stdin(arguments);
         let dir = match arguments.last() {
-            Some(s) => Path::new(s),
+            Some(Arg::Dir(d)) => Path::new(d),
             _ => Path::new(".")
         };
 
@@ -106,9 +109,10 @@ impl Interpreter {
         Ok(String::from(""))
     }
 
-    fn execute_ls(&self, _options: &Vec<char>, arguments: &Vec<String>) -> Result<String, Error> {
+    fn execute_ls(&self, _options: &Vec<String>, arguments: &Vec<Arg>) -> Result<String, Error> {
         let cmd = vec!["/c".to_string(), "dir /b".to_string()];
-        let args = [cmd, arguments.clone()].concat();
+        let tmp = arguments.clone().iter().map(|x| x.to_string()).collect();
+        let args = [cmd, tmp].concat();
         let output = Command::new("cmd")
             .args(args)
             .output();
@@ -122,21 +126,19 @@ impl Interpreter {
         }
     }
 
-    fn execute_cp(&self, _options: &Vec<char>, _arguments: &Vec<String>) -> Result<String, Error> {
+    fn execute_cp(&self, _options: &Vec<String>, _arguments: &Vec<Arg>) -> Result<String, Error> {
         unimplemented!()
     }
-    fn execute_mv(&self, _options: &Vec<char>, _arguments: &Vec<String>) -> Result<String, Error> {
+    fn execute_mv(&self, _options: &Vec<String>, _arguments: &Vec<Arg>) -> Result<String, Error> {
         unimplemented!()
     }
 
-    fn extend_arguments(&self, arguments: Vec<String>) -> Vec<String> {
+    fn replace_args_with_stdin(&self, arguments: &Vec<Arg>) -> Vec<Arg> {
         match self.stdin.clone() {
             Some(stdin) => {
-                let tmp = vec![stdin];
-                let result = [tmp, arguments].concat();
-                result
+                vec![Arg::from_string(&stdin)]
             }
-            None => arguments
+            None => arguments.clone()
         }
     }
 }

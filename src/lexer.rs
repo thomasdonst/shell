@@ -1,6 +1,7 @@
 use std::iter::Peekable;
 use std::str::Chars;
-use crate::parser::Cmd::*;
+use crate::ast::Arg;
+use crate::ast::Cmd::*;
 use crate::token::Token;
 
 pub struct Lexer<'input> {
@@ -40,11 +41,12 @@ impl<'input> Lexer<'input> {
         !matches!(c, ' ' | '>' | '<' | '&' | '|' | '=' | '"' | '$' | '-')
     }
 
+
     fn peek(&mut self) -> Option<char> {
         self.input.peek().cloned()
     }
 
-    fn consume_whitespace(&mut self) {
+    fn consume_whitespaces(&mut self) {
         while let Some(c) = self.peek() {
             if c.is_whitespace() {
                 self.next_char();
@@ -93,8 +95,14 @@ impl<'input> Iterator for Lexer<'input> {
             }
 
             Some('-') => {
-                let option = self.next_word("".to_string());
-                Some(Token::Option(option))
+                if self.peek() == Some('-') {
+                    self.next_char();
+                    let option = self.next_word("".to_string());
+                    Some(Token::DoubleHyphen(option))
+                } else {
+                    let option = self.next_word("".to_string());
+                    Some(Token::Hyphen(option))
+                }
             }
 
             Some(c) => {
@@ -106,13 +114,13 @@ impl<'input> Iterator for Lexer<'input> {
                     "ls" => Some(Token::Command(Ls)),
                     "cp" => Some(Token::Command(Cp)),
                     "mv" => Some(Token::Command(Mv)),
-                    _ => Some(Token::Argument(word))
+                    x => Some(Token::Argument(Arg::from_string(x)))
                 }
             }
 
             None => None
         };
-        self.consume_whitespace();
+        self.consume_whitespaces();
         token
     }
 }

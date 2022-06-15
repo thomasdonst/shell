@@ -1,1 +1,1 @@
-TMP2.txt
+tests/files/TMP2.txt
