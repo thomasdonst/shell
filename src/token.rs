@@ -1,5 +1,5 @@
 use std::fmt;
-use crate::ast::{Arg, Cmd};
+use crate::ast::{Cmd};
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum Token {
@@ -14,7 +14,7 @@ pub enum Token {
     DoubleQuote,
 
     Command(Cmd),
-    Argument(Arg),
+    Argument(String),
     Hyphen(String),
     DoubleHyphen(String),
     EnvVariable(String),

@@ -1,24 +1,24 @@
 use std::iter::Peekable;
-use crate::ast::{Arg, Expr};
+use crate::ast::{Expr};
 use crate::lexer::Lexer;
 use crate::token::Token;
 
 pub struct Parser<'lexer> {
     lexer: Peekable<Lexer<'lexer>>,
-    current: Option<Token>,
+    previous_token: Option<Token>,
 }
 
 impl<'lexer> Parser<'lexer> {
     pub fn new(lexer: Lexer) -> Parser {
         Parser {
             lexer: lexer.peekable(),
-            current: None,
+            previous_token: None,
         }
     }
 
     fn next(&mut self) -> Option<Token> {
-        self.current = self.lexer.next();
-        self.current.clone()
+        self.previous_token = self.lexer.next();
+        self.previous_token.clone()
     }
 
     pub fn parse(&mut self) -> Result<Expr, String> {
@@ -50,7 +50,7 @@ impl<'lexer> Parser<'lexer> {
         let command_type = match self.next() {
             Some(Token::Command(cmd)) => cmd,
             Some(x) => return Err(x.to_string() + " is not a valid command"),
-            // todo(): read input afterwards and then parse again
+            // todo: read input afterwards and then parse again
             None => return Err("Expected a command".to_string()),
         };
 
@@ -65,13 +65,13 @@ impl<'lexer> Parser<'lexer> {
         )
     }
 
-    fn parse_options_and_args(&mut self) -> (Vec<String>, Vec<Arg>) {
+    fn parse_options_and_args(&mut self) -> (Vec<String>, Vec<String>) {
         let mut options = Vec::new();
-        let mut arguments = Vec::<Arg>::new();
+        let mut arguments = Vec::new();
         while let Some(x) = self.peek() {
             match x {
                 Token::Command(cmd) => {
-                    arguments.push(Arg::Cmd(cmd));
+                    arguments.push(cmd.to_string());
                     self.next();
                 }
                 Token::Argument(arg) => {

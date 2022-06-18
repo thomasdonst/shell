@@ -1,22 +1,22 @@
-use std::process::{Command};
 use std::env;
-use std::fs::File;
-use std::io::{Error, Read};
+use std::io::Read;
 use std::path::Path;
-use crate::ast::{Arg, Cmd, Expr};
+use std::process::{ChildStdout, Command, Stdio};
+use crate::ast::{Cmd, Expr};
 
 pub struct Interpreter {
-    stdin: Option<String>,
-    stdout: Option<String>,
-    stderr: Option<String>,
+    pipe: bool,
+    prev_result: Option<ChildStdout>,
+
+    working_directory: String
 }
 
 impl Interpreter {
     pub fn new() -> Interpreter {
         Interpreter {
-            stdin: None,
-            stdout: None,
-            stderr: None,
+            pipe: false,
+            prev_result: None,
+            working_directory: env::current_dir().unwrap().display().to_string()
         }
     }
 
@@ -29,122 +29,94 @@ impl Interpreter {
         match node {
             Expr::Pipe { left, right } => {
                 self.eval_binary(left);
-                self.pipe();
-                self.eval_binary(right);
+                self.pipe = true;
+                self.eval_binary(right)
             }
             Expr::Cmd { ty, options, arguments } => {
-                self.execute(ty, options, arguments);
+                self.execute(ty, options, arguments)
             }
         }
     }
 
-    fn get_result(&self) -> String {
-        match (self.stdout.clone(), self.stderr.clone()) {
-            (Some(stdout), None) => stdout,
-            (None, Some(stderr)) => stderr,
-            (Some(stdout), Some(stderr)) => stdout + "\r\n" + &stderr,
-            (None, None) => String::from("stdout and stderr are none")
-        }
-    }
-
-    fn pipe(&mut self) {
-        self.stdin = self.stdout.clone();
-        self.stdout = None;
-    }
-
-    fn execute(&mut self, ty: &Cmd, options: &Vec<String>, arguments: &Vec<Arg>) {
-        let result = match ty {
-            Cmd::Cat => self.execute_cat(options, arguments),
-            Cmd::Pwd => self.execute_pwd(options),
+    fn execute(&mut self, ty: &Cmd, options: &Vec<String>, arguments: &Vec<String>) {
+        match ty {
             Cmd::Cd => self.execute_cd(options, arguments),
-            Cmd::Ls => self.execute_ls(options, arguments),
-            Cmd::Cp => self.execute_cp(options, arguments),
-            Cmd::Mv => self.execute_mv(options, arguments)
+            _ => {
+                let args = [options.clone(), arguments.clone()].concat();
+                self.spawn_process(&ty.to_string(), &args);
+            }
+        }
+    }
+
+    fn execute_cd(&self, _options: &Vec<String>, arguments: &Vec<String>) {
+        // todo: implement options
+        // let arguments = self.replace_args_with_stdin(arguments);
+        let directory = match arguments.last() {
+            Some(dir) => dir,
+            _ => {
+                println!("Cd has no argument");
+                return;
+            }
         };
 
-        match &result {
-            Ok(s) => {
-                self.stdout = Some(s.clone());
-                self.stderr = None;
+        if !self.is_dir(directory) {
+            println!("{} is not a valid directory", directory);
+            return;
+        }
+
+        let path = Path::new(directory);
+        match env::set_current_dir(path) {
+            Ok(_) => (),
+            Err(_) => println!("Could set working directory")
+        }
+    }
+
+    fn spawn_process(&mut self, cmd_type: &str, arguments: &Vec<String>) {
+        let program = self.working_directory.clone() + "/bin/" + cmd_type;
+
+        let stdin = match self.pipe {
+            true => {
+                self.pipe = false;
+                match self.prev_result.take() {
+                    Some(c) => Stdio::from(c),
+                    None => {
+                        println!("No input");
+                        Stdio::inherit()
+                    }
+                }
             }
-            Err(e) => {
-                self.stdout = None;
-                self.stderr = Some(e.to_string());
-            }
-        }
-    }
-
-    fn execute_cat(&self, _options: &Vec<String>, arguments: &Vec<Arg>) -> Result<String, Error> {
-        let arguments = self.replace_args_with_stdin(arguments);
-
-        let mut result = String::from("");
-        let mut args_iter = arguments.iter();
-
-        while let Some(Arg::File(filename)) = args_iter.next() {
-            let mut file = File::open(".\\".to_string() + filename)?;
-            let mut contents = String::new();
-            file.read_to_string(&mut contents)?;
-            result.push_str(format!("{}\n", contents).as_str());
-        }
-
-        if result.ends_with("\n") {
-            result = result[0..result.len() - 1].to_string();
-        }
-
-        Ok(result)
-    }
-
-    fn execute_pwd(&self, _options: &Vec<String>) -> Result<String, Error> {
-        Ok(env::current_dir().unwrap().display().to_string())
-    }
-
-    fn execute_cd(&self, _options: &Vec<String>, arguments: &Vec<Arg>) -> Result<String, Error> {
-        let arguments = self.replace_args_with_stdin(arguments);
-        let dir = match arguments.last() {
-            Some(Arg::Dir(d)) => Path::new(d),
-            _ => Path::new(".")
+            false => Stdio::inherit()
         };
 
-        env::set_current_dir(dir)?;
-        Ok(String::from(""))
+        let process = Command::new(program)
+            .args(arguments)
+            .stdin(stdin)
+            .stdout(Stdio::piped())
+            .spawn();
+
+        match process {
+            Ok(c) => self.prev_result = c.stdout,
+            Err(e) => println!("error: {}", e.to_string())
+        };
     }
 
-    fn execute_ls(&self, _options: &Vec<String>, arguments: &Vec<Arg>) -> Result<String, Error> {
-        let cmd = vec!["/c".to_string(), "dir /b".to_string()];
-        let tmp = arguments.clone().iter().map(|x| x.to_string()).collect();
-        let args = [cmd, tmp].concat();
-        let output = Command::new("cmd")
-            .args(args)
-            .output();
-
-        match output {
-            Ok(mut x) => {
-                let a = String::from_utf8_lossy(&mut x.stdout).to_string();
-                Ok(a)
+    fn get_result(&mut self) -> String {
+        let result = match self.prev_result.take() {
+            Some(mut stdout) => {
+                let mut buffer = String::new();
+                let _ = stdout.read_to_string(&mut buffer);
+                buffer
             }
-            Err(e) => Err(e),
-        }
+            None => "None".to_string()
+        };
+        result
     }
 
-    fn execute_cp(&self, _options: &Vec<String>, _arguments: &Vec<Arg>) -> Result<String, Error> {
-        unimplemented!()
-    }
-    fn execute_mv(&self, _options: &Vec<String>, _arguments: &Vec<Arg>) -> Result<String, Error> {
-        unimplemented!()
+    fn is_file(&self, file: &str) -> bool {
+        Path::new(file).is_file()
     }
 
-    fn replace_args_with_stdin(&self, arguments: &Vec<Arg>) -> Vec<Arg> {
-        match self.stdin.clone() {
-            Some(stdin) => {
-                vec![Arg::from_string(&stdin)]
-            }
-            None => arguments.clone()
-        }
-    }
-}
-
-impl Default for Interpreter {
-    fn default() -> Self {
-        Self::new()
+    fn is_dir(&self, dir: &str) -> bool {
+        Path::new(dir).is_dir()
     }
 }

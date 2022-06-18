@@ -1,6 +1,5 @@
 use std::iter::Peekable;
 use std::str::Chars;
-use crate::ast::Arg;
 use crate::ast::Cmd::*;
 use crate::token::Token;
 
@@ -110,11 +109,15 @@ impl<'input> Iterator for Lexer<'input> {
                 match word.to_lowercase().as_str() {
                     "cat" => Some(Token::Command(Cat)),
                     "pwd" => Some(Token::Command(Pwd)),
+                    "wc" => Some(Token::Command(Wc)),
                     "cd" => Some(Token::Command(Cd)),
                     "ls" => Some(Token::Command(Ls)),
                     "cp" => Some(Token::Command(Cp)),
                     "mv" => Some(Token::Command(Mv)),
-                    x => Some(Token::Argument(Arg::from_string(x)))
+                    "echo" => Some(Token::Command(Echo)),
+                    "mkdir" => Some(Token::Command(Mkdir)),
+                    "grep" => Some(Token::Command(Grep)),
+                    str => Some(Token::Argument(str.to_string()))
                 }
             }
 

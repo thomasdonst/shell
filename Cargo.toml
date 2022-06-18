@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+tokio = "1.19.2"
 
 [dev-dependencies]
 pretty_assertions = "0.7.2"
