@@ -1,6 +1,6 @@
 use std::iter::Peekable;
-use std::str::Chars;
-use crate::ast::Cmd::*;
+use std::str::{Chars, FromStr};
+use crate::ast::CmdType;
 use crate::token::Token;
 
 pub struct Lexer<'input> {
@@ -39,7 +39,6 @@ impl<'input> Lexer<'input> {
     fn is_word_member(&self, c: char) -> bool {
         !matches!(c, ' ' | '>' | '<' | '&' | '|' | '=' | '"' | '$' | '-')
     }
-
 
     fn peek(&mut self) -> Option<char> {
         self.input.peek().cloned()
@@ -86,7 +85,7 @@ impl<'input> Iterator for Lexer<'input> {
 
             Some('=') => Some(Token::Equal),
 
-            Some('"') => Some(Token::DoubleQuote),
+            Some('"') => Some(Token::Quote),
 
             Some('$') => {
                 let res = self.next_word("".to_string());
@@ -106,18 +105,9 @@ impl<'input> Iterator for Lexer<'input> {
 
             Some(c) => {
                 let word = self.next_word(c.to_string());
-                match word.to_lowercase().as_str() {
-                    "cat" => Some(Token::Command(Cat)),
-                    "pwd" => Some(Token::Command(Pwd)),
-                    "wc" => Some(Token::Command(Wc)),
-                    "cd" => Some(Token::Command(Cd)),
-                    "ls" => Some(Token::Command(Ls)),
-                    "cp" => Some(Token::Command(Cp)),
-                    "mv" => Some(Token::Command(Mv)),
-                    "echo" => Some(Token::Command(Echo)),
-                    "mkdir" => Some(Token::Command(Mkdir)),
-                    "grep" => Some(Token::Command(Grep)),
-                    str => Some(Token::Argument(str.to_string()))
+                match CmdType::from_str(&word) {
+                    Ok(cmd) => Some(Token::Command(cmd)),
+                    Err(_) => Some(Token::Argument(word))
                 }
             }
 

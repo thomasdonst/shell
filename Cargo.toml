@@ -4,7 +4,6 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-tokio = "1.19.2"
 
 [dev-dependencies]
 pretty_assertions = "0.7.2"
@@ -12,3 +11,11 @@ pretty_assertions = "0.7.2"
 [lib]
 name = "shell"
 path = "src/lib.rs"
+
+[[bin]]
+name = "main"
+src = "src/bin/main.rs"
+
+[[bin]]
+name = "cat"
+src = "src/bin/cat.rs"

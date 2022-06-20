@@ -1,7 +1,9 @@
 use std::fmt;
+use std::str::FromStr;
+use crate::ast::CmdType::*;
 
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub enum Cmd {
+pub enum CmdType {
     Cat,
     Pwd,
     Cd,
@@ -11,10 +13,30 @@ pub enum Cmd {
     Echo,
     Mkdir,
     Wc,
-    Grep
+    Grep,
 }
 
-impl fmt::Display for Cmd {
+impl FromStr for CmdType {
+    type Err = String;
+
+    fn from_str(str: &str) -> Result<Self, String> {
+        match str.to_lowercase().as_str() {
+            "cat" => Ok(Cat),
+            "pwd" => Ok(Pwd),
+            "wc" => Ok(Wc),
+            "cd" => Ok(Cd),
+            "ls" => Ok(Ls),
+            "cp" => Ok(Cp),
+            "mv" => Ok(Mv),
+            "echo" => Ok(Echo),
+            "mkdir" => Ok(Mkdir),
+            "grep" => Ok(Grep),
+            x => Err(x.to_string())
+        }
+    }
+}
+
+impl fmt::Display for CmdType {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{:?}", self)
     }
@@ -23,8 +45,7 @@ impl fmt::Display for Cmd {
 #[derive(Debug)]
 pub enum Expr {
     Cmd {
-        ty: Cmd,
-        options: Vec<String>,
+        program: CmdType,
         arguments: Vec<String>,
     },
     Pipe {
