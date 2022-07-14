@@ -1,7 +1,8 @@
-use std::fmt;
-use crate::ast::{CmdType};
+#![allow(warnings)]
 
-#[derive(Debug)]
+use std::fmt;
+
+#[derive(Debug, PartialEq, Eq)]
 pub enum Token {
     Great,
     DoubleGreat,
@@ -9,11 +10,13 @@ pub enum Token {
     Less,
     DoubleLess,
     Ampersand,
+    DoubleAmpersand,
     Pipe,
     Equal,
     Quote,
+    Semicolon,
 
-    Command(CmdType),
+    Command(String),
     Argument(String),
     Hyphen(String),
     DoubleHyphen(String),
@@ -22,27 +25,19 @@ pub enum Token {
 
 impl fmt::Display for Token {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{self:?}")
+        write!(f, "{:?}", self)
     }
 }
 
-impl PartialEq<Self> for Token {
-    fn eq(&self, other: &Self) -> bool {
+impl Token {
+    fn compare_type(&self, other: &Self) -> bool {
         match self {
-            Token::Great => matches!(other, Token::Great),
-            Token::DoubleGreat => matches!(other, Token::DoubleGreat),
-            Token::GreatAmpersand => matches!(other, Token::GreatAmpersand),
-            Token::Less => matches!(other, Token::Less),
-            Token::DoubleLess => matches!(other, Token::DoubleLess),
-            Token::Ampersand => matches!(other, Token::Ampersand),
-            Token::Pipe => matches!(other, Token::Pipe),
-            Token::Equal => matches!(other, Token::Equal),
-            Token::Quote => matches!(other, Token::Equal),
             Token::Hyphen(_) => matches!(other, Token::Hyphen(_)),
             Token::DoubleHyphen(_) => matches!(other, Token::DoubleHyphen(_)),
             Token::Command(_) => matches!(other, Token::Command(_)),
             Token::Argument(_) => matches!(other, Token::Argument(_)),
             Token::EnvVariable(_) => matches!(other, Token::EnvVariable(_)),
+            _ => self == other
         }
     }
 }

@@ -1,20 +1,27 @@
+#![allow(warnings)]
+
+use std::env;
 use std::iter::Peekable;
+use std::path::Path;
 use std::str::{Chars, FromStr};
-use crate::ast::CmdType;
 use crate::token::Token;
 
 pub struct Lexer<'input> {
     input: Peekable<Chars<'input>>,
+
+    program_dir: String,
 }
 
 impl<'input> Lexer<'input> {
-    pub fn new(input: &'input str) -> Lexer {
+    pub fn new(input: &'input str, program_dir: &str) -> Lexer<'input> {
         Lexer {
-            input: input.chars().peekable()
+            input: input.chars().peekable(),
+
+            program_dir: program_dir.to_string(),
         }
     }
 
-    pub fn get_all_tokens(&mut self) -> Vec<Token> {
+    pub fn get_tokens(&mut self) -> Vec<Token> {
         let mut tokens = Vec::<Token>::new();
         self.for_each(|token| tokens.push(token));
         tokens
@@ -37,7 +44,7 @@ impl<'input> Lexer<'input> {
     }
 
     fn is_word_member(&self, c: char) -> bool {
-        !matches!(c, ' ' | '>' | '<' | '&' | '|' | '=' | '"' | '$' | '-')
+        !matches!(c, ' ' | '>' | '<' | '&' | '|' | '=' | '"' | '$' | '-' | ';')
     }
 
     fn peek(&mut self) -> Option<char> {
@@ -79,13 +86,21 @@ impl<'input> Iterator for Lexer<'input> {
                     Some(Token::Less)
                 }
 
-            Some('&') => Some(Token::Ampersand),
+            Some('&') =>
+                if self.peek() == Some('&') {
+                    self.input.next();
+                    Some(Token::DoubleAmpersand)
+                } else {
+                    Some(Token::Ampersand)
+                }
 
             Some('|') => Some(Token::Pipe),
 
             Some('=') => Some(Token::Equal),
 
             Some('"') => Some(Token::Quote),
+
+            Some(';') => Some(Token::Semicolon),
 
             Some('$') => {
                 let res = self.next_word("".to_string());
@@ -103,13 +118,16 @@ impl<'input> Iterator for Lexer<'input> {
                 }
             }
 
-            Some(c) => {
-                let word = self.next_word(c.to_string());
-                match CmdType::from_str(&word) {
-                    Ok(cmd) => Some(Token::Command(cmd)),
-                    Err(_) => Some(Token::Argument(word))
-                }
-            }
+            Some(c) => Some({
+                let word = self.next_word(c.to_string()).to_lowercase();
+                let program_path = self.program_dir.clone() + &word + ".exe";
+
+                let built_in_shell = ["cd", "clear"].contains(&word.as_str());
+                let found_program = Path::new(&program_path).exists();
+                let program_exists = found_program || built_in_shell;
+
+                if program_exists { Token::Command(word) } else { Token::Argument(word) }
+            }),
 
             None => None
         };

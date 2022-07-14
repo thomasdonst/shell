@@ -1,54 +1,74 @@
-use std::{env, io};
+#![allow(warnings)]
+
+
+use std::{env, io, thread};
 use std::fs::File;
-use std::io::Read;
+use std::io::{BufRead, Read, Write};
 use std::path::Path;
 use std::process::{ChildStderr, ChildStdout, Command, Stdio};
-use crate::ast::{CmdType, Expr};
+use std::time::Duration;
+use crate::ast::{Operator, Expr};
+use crate::token::Token;
 
 pub struct Interpreter {
-    stdout: Option<ChildStdout>,
     stderr: Option<ChildStderr>,
+    stdout: Option<ChildStdout>,
     is_piped: bool,
+    successful_command: bool,
 
-    working_dir: String,
-    program_path: String,
+    program_dir: String,
 }
 
 impl Interpreter {
-    pub fn new(program_path: String) -> Interpreter {
+    pub fn new(program_path: &str) -> Interpreter {
         Interpreter {
-            stdout: None,
             stderr: None,
+            stdout: None,
             is_piped: false,
+            successful_command: false,
 
-            working_dir: env::current_dir().unwrap().display().to_string(),
-            program_path,
+            program_dir: program_path.to_string(),
         }
     }
 
-    pub fn eval(&mut self, ast: &Expr) -> String {
+    pub fn eval(&mut self, ast: &Expr) {
         self.eval_binary(ast);
-        self.get_result()
+        self.print_result()
     }
+
 
     fn eval_binary(&mut self, node: &Expr) {
         match node {
-            Expr::Pipe { left, right } => {
+            Expr::Binary(lhs, Operator::Pipe, rhs) => {
+                self.eval_binary(lhs);
                 self.is_piped = true;
-                self.eval_binary(left);
-                self.eval_binary(right);
+                self.eval_binary(rhs);
                 self.is_piped = false;
             }
-            Expr::Cmd { program: ty, arguments } => {
-                self.execute(ty, arguments)
+            Expr::Binary(lhs, Operator::Next, rhs) => {
+                self.eval_binary(lhs);
+                self.print_result();
+                self.eval_binary(rhs);
+                self.print_result();
+            }
+            // todo: implement and
+            // Expr::Binary(lhs, Operator::And, rhs) => {
+            //     self.eval_binary(lhs);
+            //     if self.successful_command {
+            //         self.eval_binary(rhs);
+            //     }
+            // }
+            Expr::Cmd { program: cmd_type, arguments } => {
+                self.execute(cmd_type, arguments);
             }
         }
     }
 
-    fn execute(&mut self, program: &CmdType, arguments: &Vec<String>) {
-        match program {
-            CmdType::Cd => self.execute_cd(arguments),
-            _ => self.spawn_process(&program.to_string(), arguments)
+    fn execute(&mut self, cmd_type: &str, arguments: &Vec<String>) {
+        match cmd_type {
+            "cd" => self.execute_cd(arguments),
+            "clear" => self.execute_clear(),
+            _ => self.execute_program(cmd_type, arguments)
         }
     }
 
@@ -56,20 +76,20 @@ impl Interpreter {
         if self.is_piped {
             self.stdout = None;
             self.stderr = None;
-            return
+            return;
         }
         // todo: implement options
         let directory = match arguments.last() {
             Some(dir) => dir,
             _ => {
                 eprintln!("Cd has no argument");
-                return
+                return;
             }
         };
 
         if !is_dir(directory) {
-            eprintln!("{directory} is not a valid directory");
-            return
+            eprintln!("{} is not a valid directory", directory);
+            return;
         }
 
         let path = Path::new(directory);
@@ -82,47 +102,52 @@ impl Interpreter {
         self.stderr = None;
     }
 
-    fn spawn_process(&mut self, program: &str, arguments: &Vec<String>) {
-        let path = self.working_dir.clone() + &self.program_path + program;
+    fn execute_clear(&mut self) {
+        // todo: fix bug
+        print!("\x1b[2J\x1b[1;1H")
+    }
 
-        let stdin = match self.stdout.take() {
-            Some(c) => Stdio::from(c),
-            None => Stdio::inherit()
-        };
+    fn execute_program(&mut self, program_name: &str, arguments: &Vec<String>) {
+        let program_path = self.program_dir.clone() + program_name;
+        let mut command = Command::new(&program_path);
 
-        let process = Command::new(path)
+        let program = command
             .args(arguments)
-            .stdin(stdin)
             .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn();
+            .stderr(Stdio::piped());
 
-        match process {
+        if self.is_piped {
+            let stdout = Stdio::from(self.stdout.take().unwrap());
+            program.stdin(stdout);
+        }
+
+        match program.spawn() {
             Ok(c) => {
-                self.stdout = c.stdout;
                 self.stderr = c.stderr;
+                self.stdout = c.stdout;
             }
-            Err(e) => eprintln!("Process could not be started: {}", e.to_string())
+            Err(e) => eprintln!("{}\r\n{}", e.to_string(), &program_path)
         };
     }
 
-    fn get_result(&mut self) -> String {
-        let mut stderr_result = String::new();
-        match self.stderr.take() {
-            Some(mut x) => {
-                let _ = x.read_to_string(&mut stderr_result);
-            }
-            None => {}
+    fn print_result(&mut self) {
+        if let Some(mut stderr) = self.stderr.take() {
+            self.print_fd_buffer(&mut stderr as &mut dyn Read)
         }
-        let mut stdout_result = String::new();
-        match self.stdout.take() {
-            Some(mut x) => {
-                let _ = x.read_to_string(&mut stdout_result);
-            }
-            None => {}
+        if let Some(mut stdout) = self.stdout.take() {
+            self.print_fd_buffer(&mut stdout as &mut dyn Read)
         }
+    }
 
-        stderr_result + stdout_result.as_str()
+    fn print_fd_buffer(&mut self, fd: &mut dyn Read) {
+        let mut buffer = String::new();
+        let _ = fd.read_to_string(&mut buffer);
+        if !buffer.is_empty() {
+            if !buffer.ends_with("\n") {
+                buffer.push_str("\n")
+            }
+            print!("{}", buffer)
+        }
     }
 }
 
@@ -148,10 +173,10 @@ pub fn read_file(path: &str) -> Result<String, String> {
             if file.read_to_string(&mut contents).is_ok() {
                 Ok(contents)
             } else {
-                Err(format!("Can't read file: {path}"))
+                Err(format!("Can't read file: {}", path))
             }
         }
-        Err(_) => Err(format!("Can't open file: {path}"))
+        Err(_) => Err(format!("Can't open file: {}", path))
     }
 }
 
@@ -159,12 +184,18 @@ pub fn read_files(files: Vec<String>, stdout: &mut String, stderr: &mut String) 
     for file in &files {
         match read_file(&file) {
             Ok(result) => {
-                stdout.push_str(&result);
+                stdout.push_str(&(result + "\r\n"));
             }
             Err(error) => {
-                stderr.push_str(&error);
+                stderr.push_str(&(error + "\r\n"));
             }
         }
+    }
+    if stdout.len() >= 2 {
+        stdout.truncate(stdout.len() - 2)
+    }
+    if stderr.len() >= 2 {
+        stderr.truncate(stderr.len() - 2)
     }
 }
 
@@ -185,4 +216,3 @@ pub fn process_options(options: Vec<String>, pref: Vec<char>) -> Result<Vec<char
 pub fn get_args() -> Vec<String> {
     env::args().skip(1).collect::<Vec<String>>()
 }
-

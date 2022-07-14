@@ -6,16 +6,7 @@ edition = "2021"
 [dependencies]
 
 [dev-dependencies]
-pretty_assertions = "0.7.2"
 
 [lib]
 name = "shell"
 path = "src/lib.rs"
-
-[[bin]]
-name = "main"
-src = "src/bin/main.rs"
-
-[[bin]]
-name = "cat"
-src = "src/bin/cat.rs"

@@ -1,5 +1,7 @@
+#![allow(warnings)]
+
 use std::iter::Peekable;
-use crate::ast::{Expr};
+use crate::ast::{Operator, Expr};
 use crate::lexer::Lexer;
 use crate::token::Token;
 
@@ -19,27 +21,50 @@ impl<'lexer> Parser<'lexer> {
     }
 
     pub fn parse(&mut self) -> Result<Expr, String> {
-        self.parse_binary()
+        self.parse_binary(0)
     }
 
     fn peek(&mut self) -> Option<&Token> {
         self.lexer.peek().take()
     }
 
-    fn parse_binary(&mut self) -> Result<Expr, String> {
+    fn parse_binary(&mut self, min_binding_power: u8) -> Result<Expr, String> {
         let mut lhs = self.parse_command()?;
         loop {
-            if !self.expect_token(&Token::Pipe) {
+            let op;
+            match self.peek_operator() {
+                Ok(o) => op = o,
+                Err(_) => break
+            }
+
+            let (left_bp, right_bp) = self.get_binding_power(&op);
+            if min_binding_power > left_bp {
                 break;
             }
             self.next();
-            let rhs = self.parse_binary()?;
-            lhs = Expr::Pipe {
-                left: Box::new(lhs),
-                right: Box::new(rhs),
-            }
+            let rhs = self.parse_binary(right_bp)?;
+            lhs = Expr::Binary(
+                Box::new(lhs),
+                op,
+                Box::new(rhs),
+            );
         }
         Ok(lhs)
+    }
+
+    fn peek_operator(&mut self) -> Result<Operator, ()> {
+        match self.peek() {
+            Some(Token::Semicolon) => Ok(Operator::Next),
+            Some(Token::Pipe) => Ok(Operator::Pipe),
+            _ => Err(())
+        }
+    }
+
+    fn get_binding_power(&mut self, op: &Operator) -> (u8, u8) {
+        match op {
+            Operator::Next => (1, 2),
+            Operator::Pipe => (2, 3)
+        }
     }
 
 
@@ -47,7 +72,6 @@ impl<'lexer> Parser<'lexer> {
         let command_type = match self.next() {
             Some(Token::Command(cmd)) => cmd,
             Some(x) => return Err(x.to_string() + " is not a valid command"),
-            // todo: read input afterwards and then parse again
             None => return Err("Expected a command".to_string()),
         };
 
@@ -67,8 +91,12 @@ impl<'lexer> Parser<'lexer> {
                     arguments.push(cmd.to_string());
                     self.next();
                 }
-                Token::Hyphen(s) | Token::DoubleHyphen(s) => {
+                Token::Hyphen(s) => {
                     arguments.push("-".to_string() + s);
+                    self.next();
+                }
+                Token::DoubleHyphen(s) => {
+                    arguments.push("--".to_string() + s);
                     self.next();
                 }
                 Token::Argument(s) => {
@@ -78,14 +106,20 @@ impl<'lexer> Parser<'lexer> {
                 _ => break
             }
         }
-
         arguments
     }
 
-    fn expect_token(&mut self, should: &Token) -> bool {
-        match self.peek() {
-            Some(is) => is == should,
-            None => false
-        }
-    }
+    // fn expect_token(&mut self, should: &Token) -> bool {
+    //     match self.peek() {
+    //         Some(is) => is == should,
+    //         None => false
+    //     }
+    // }
+    //
+    // fn expect_tokens(&mut self, should: Vec<Token>) -> bool {
+    //     match self.peek() {
+    //         Some(is) => should.iter().any(|should| is == should),
+    //         None => false
+    //     }
+    // }
 }

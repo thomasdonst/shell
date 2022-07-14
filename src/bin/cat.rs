@@ -1,5 +1,6 @@
-use shell::interpreter::{get_args, process_options, read_files, read_stdin};
+#![allow(warnings)]
 
+use shell::interpreter::{get_args, process_options, read_files, read_stdin};
 
 fn main() {
     let mut stdout = String::new();
@@ -8,29 +9,29 @@ fn main() {
     let arguments = get_args();
     let (files, options) = split_args(&arguments);
 
+
     if !files.is_empty() {
         read_files(files, &mut stdout, &mut stderr)
-    } else {
-        stdout.push_str(&read_stdin())
-    }
+    } else {}
 
-
-    match process_options(options, vec!['b', 'e']) {
+    match process_options(options, vec!['b', 'n']) {
         Ok(flags) => {
             if flags.contains(&'b') {
                 stdout = remove_empty_lines(&stdout)
             }
-            if flags.contains(&'e') {
+            if flags.contains(&'n') {
                 stdout = display_line_numbers(&stdout)
             }
         }
-        Err(char) => stderr = format!("{} is not a valid option", char)
+        Err(char) => {
+            eprint!("{} is not a valid option", char);
+            return;
+        }
     }
 
-    println!("{stdout}");
-    eprintln!("{stderr}");
+    print!("{}", stdout);
+    eprint!("{}", stderr);
 }
-
 
 fn split_args(arguments: &[String]) -> (Vec<String>, Vec<String>) {
     arguments
@@ -59,7 +60,7 @@ fn display_line_numbers(str: &str) -> String {
         .split("\r\n")
         .map(|x| {
             counter += 1;
-            format!("    {counter} {x}")
+            format!("    {} {}", counter, x)
         })
         .collect::<Vec<String>>()
         .join("\r\n")
