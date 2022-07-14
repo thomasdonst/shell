@@ -1,3 +1,7 @@
+/programs
+
+Cargo.lock
+
 /.idea
 
 /src/tmp.rs
