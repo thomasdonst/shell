@@ -1,6 +1,7 @@
 #![allow(warnings)]
 
 use std::env;
+use std::fs::OpenOptions;
 use std::iter::Peekable;
 use std::path::Path;
 use std::str::{Chars, FromStr};
@@ -67,24 +68,9 @@ impl<'input> Iterator for Lexer<'input> {
 
     fn next(&mut self) -> Option<Token> {
         let token = match self.next_char() {
-            Some('>') =>
-                if self.peek() == Some('>') {
-                    self.input.next();
-                    Some(Token::DoubleGreat)
-                } else if self.peek() == Some('&') {
-                    self.input.next();
-                    Some(Token::GreatAmpersand)
-                } else {
-                    Some(Token::Great)
-                },
+            Some('>') => Some(Token::Great),
 
-            Some('<') =>
-                if self.peek() == Some('<') {
-                    self.input.next();
-                    Some(Token::DoubleLess)
-                } else {
-                    Some(Token::Less)
-                }
+            Some('<') => Some(Token::Less),
 
             Some('&') =>
                 if self.peek() == Some('&') {
@@ -123,7 +109,7 @@ impl<'input> Iterator for Lexer<'input> {
                 let program_path = self.program_dir.clone() + &word + ".exe";
 
                 let built_in_shell = ["cd", "clear"].contains(&word.as_str());
-                let found_program = Path::new(&program_path).exists();
+                let found_program = Path::new(&program_path).is_file();
                 let program_exists = found_program || built_in_shell;
 
                 if program_exists { Token::Command(word) } else { Token::Argument(word) }

@@ -29,7 +29,7 @@ impl<'lexer> Parser<'lexer> {
     }
 
     fn parse_binary(&mut self, min_binding_power: u8) -> Result<Expr, String> {
-        let mut lhs = self.parse_command()?;
+        let mut lhs = self.parse_atom()?;
         loop {
             let op;
             match self.peek_operator() {
@@ -52,10 +52,28 @@ impl<'lexer> Parser<'lexer> {
         Ok(lhs)
     }
 
+    fn parse_atom(&mut self) -> Result<Expr, String> {
+        match self.next() {
+            Some(Token::Command(cmd_type)) => {
+                Ok(
+                    Expr::Cmd {
+                        program: cmd_type,
+                        arguments: self.parse_args(),
+                    }
+                )
+            }
+            Some(Token::Argument(arg)) => Ok(Expr::Argument(arg.to_string())),
+            _ => Err("Expected a command".to_string()),
+        }
+    }
+
     fn peek_operator(&mut self) -> Result<Operator, ()> {
         match self.peek() {
             Some(Token::Semicolon) => Ok(Operator::Next),
             Some(Token::Pipe) => Ok(Operator::Pipe),
+            Some(Token::DoubleAmpersand) => Ok(Operator::And),
+            Some(Token::Great) => Ok(Operator::OutputRedirect),
+            Some(Token::Less) => Ok(Operator::InputRedirect),
             _ => Err(())
         }
     }
@@ -63,24 +81,11 @@ impl<'lexer> Parser<'lexer> {
     fn get_binding_power(&mut self, op: &Operator) -> (u8, u8) {
         match op {
             Operator::Next => (1, 2),
-            Operator::Pipe => (2, 3)
+            Operator::And => (3, 4),
+            Operator::Pipe => (4, 5),
+            Operator::OutputRedirect => (5, 6),
+            Operator::InputRedirect => (5, 6),
         }
-    }
-
-
-    fn parse_command(&mut self) -> Result<Expr, String> {
-        let command_type = match self.next() {
-            Some(Token::Command(cmd)) => cmd,
-            Some(x) => return Err(x.to_string() + " is not a valid command"),
-            None => return Err("Expected a command".to_string()),
-        };
-
-        Ok(
-            Expr::Cmd {
-                program: command_type,
-                arguments: self.parse_args(),
-            }
-        )
     }
 
     fn parse_args(&mut self) -> Vec<String> {
@@ -108,18 +113,4 @@ impl<'lexer> Parser<'lexer> {
         }
         arguments
     }
-
-    // fn expect_token(&mut self, should: &Token) -> bool {
-    //     match self.peek() {
-    //         Some(is) => is == should,
-    //         None => false
-    //     }
-    // }
-    //
-    // fn expect_tokens(&mut self, should: Vec<Token>) -> bool {
-    //     match self.peek() {
-    //         Some(is) => should.iter().any(|should| is == should),
-    //         None => false
-    //     }
-    // }
 }

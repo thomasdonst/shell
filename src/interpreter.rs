@@ -1,20 +1,22 @@
 #![allow(warnings)]
 
-
-use std::{env, io, thread};
-use std::fs::File;
+use std::{env, io};
+use std::fs::{File, OpenOptions};
 use std::io::{BufRead, Read, Write};
 use std::path::Path;
-use std::process::{ChildStderr, ChildStdout, Command, Stdio};
+use std::process::{ChildStderr, ChildStdout, Command, ExitCode, ExitStatus, Stdio};
 use std::time::Duration;
 use crate::ast::{Operator, Expr};
 use crate::token::Token;
+use crate::utils::is_dir;
 
 pub struct Interpreter {
     stderr: Option<ChildStderr>,
     stdout: Option<ChildStdout>,
+    exit_success: bool,
+
     is_piped: bool,
-    successful_command: bool,
+    // file: Option<File>,
 
     program_dir: String,
 }
@@ -24,8 +26,10 @@ impl Interpreter {
         Interpreter {
             stderr: None,
             stdout: None,
+            exit_success: false,
+
             is_piped: false,
-            successful_command: false,
+            // file: None,
 
             program_dir: program_path.to_string(),
         }
@@ -36,7 +40,6 @@ impl Interpreter {
         self.print_result()
     }
 
-
     fn eval_binary(&mut self, node: &Expr) {
         match node {
             Expr::Binary(lhs, Operator::Pipe, rhs) => {
@@ -44,6 +47,7 @@ impl Interpreter {
                 self.is_piped = true;
                 self.eval_binary(rhs);
                 self.is_piped = false;
+                return;
             }
             Expr::Binary(lhs, Operator::Next, rhs) => {
                 self.eval_binary(lhs);
@@ -51,15 +55,26 @@ impl Interpreter {
                 self.eval_binary(rhs);
                 self.print_result();
             }
-            // todo: implement and
-            // Expr::Binary(lhs, Operator::And, rhs) => {
-            //     self.eval_binary(lhs);
-            //     if self.successful_command {
-            //         self.eval_binary(rhs);
-            //     }
-            // }
+            Expr::Binary(lhs, Operator::And, rhs) => {
+                self.eval_binary(lhs);
+                self.print_result();
+                if self.exit_success { self.eval_binary(rhs) }
+                self.print_result();
+            }
             Expr::Cmd { program: cmd_type, arguments } => {
                 self.execute(cmd_type, arguments);
+            }
+            Expr::Binary(lhs, Operator::InputRedirect, rhs) => {
+                // todo: implement InputRedirect
+                println!("InputRedirect")
+            }
+            Expr::Binary(lhs, Operator::OutputRedirect, rhs) => {
+                // todo: implement OutputRedirect
+                println!("OutputRedirect")
+            }
+            Expr::Argument(arg) => {
+                // todo: handle if expression at this branch (maybe)
+                eprintln!("Expected a command")
             }
         }
     }
@@ -103,7 +118,6 @@ impl Interpreter {
     }
 
     fn execute_clear(&mut self) {
-        // todo: fix bug
         print!("\x1b[2J\x1b[1;1H")
     }
 
@@ -122,7 +136,11 @@ impl Interpreter {
         }
 
         match program.spawn() {
-            Ok(c) => {
+            Ok(mut c) => {
+                match c.wait() {
+                    Ok(status) => self.exit_success = status.success(),
+                    Err(_) => eprintln!("command wasn't running")
+                }
                 self.stderr = c.stderr;
                 self.stdout = c.stdout;
             }
@@ -132,87 +150,27 @@ impl Interpreter {
 
     fn print_result(&mut self) {
         if let Some(mut stderr) = self.stderr.take() {
-            self.print_fd_buffer(&mut stderr as &mut dyn Read)
+            let stderr_buffer = self.get_buffer(&mut stderr as &mut dyn Read);
+            if !stderr_buffer.is_empty() {
+                eprint!("{}", stderr_buffer);
+            }
         }
         if let Some(mut stdout) = self.stdout.take() {
-            self.print_fd_buffer(&mut stdout as &mut dyn Read)
+            let stdout_buffer = self.get_buffer(&mut stdout as &mut dyn Read);
+            if !stdout_buffer.is_empty() {
+                print!("{}", stdout_buffer);
+            }
         }
     }
 
-    fn print_fd_buffer(&mut self, fd: &mut dyn Read) {
+    fn get_buffer(&mut self, fd: &mut dyn Read) -> String {
         let mut buffer = String::new();
         let _ = fd.read_to_string(&mut buffer);
         if !buffer.is_empty() {
             if !buffer.ends_with("\n") {
                 buffer.push_str("\n")
             }
-            print!("{}", buffer)
         }
+        buffer
     }
-}
-
-pub fn read_stdin() -> String {
-    let mut result = String::new();
-    let lines = io::stdin().lines();
-    lines.for_each(|l| result.push_str(&*format!("{}\r\n", l.unwrap())));
-    result[0..result.len() - 1].to_string()
-}
-
-pub fn is_file(path: &str) -> bool {
-    Path::new(path).is_file()
-}
-
-pub fn is_dir(path: &str) -> bool {
-    Path::new(path).is_dir()
-}
-
-pub fn read_file(path: &str) -> Result<String, String> {
-    match File::open("./".to_string() + path) {
-        Ok(mut file) => {
-            let mut contents = String::new();
-            if file.read_to_string(&mut contents).is_ok() {
-                Ok(contents)
-            } else {
-                Err(format!("Can't read file: {}", path))
-            }
-        }
-        Err(_) => Err(format!("Can't open file: {}", path))
-    }
-}
-
-pub fn read_files(files: Vec<String>, stdout: &mut String, stderr: &mut String) {
-    for file in &files {
-        match read_file(&file) {
-            Ok(result) => {
-                stdout.push_str(&(result + "\r\n"));
-            }
-            Err(error) => {
-                stderr.push_str(&(error + "\r\n"));
-            }
-        }
-    }
-    if stdout.len() >= 2 {
-        stdout.truncate(stdout.len() - 2)
-    }
-    if stderr.len() >= 2 {
-        stderr.truncate(stderr.len() - 2)
-    }
-}
-
-pub fn process_options(options: Vec<String>, pref: Vec<char>) -> Result<Vec<char>, char> {
-    let mut valid_result: Vec<char> = Vec::new();
-    for option in options {
-        let chars = option.chars().collect::<Vec<char>>();
-        for char in chars {
-            match pref.contains(&char) {
-                true => valid_result.push(char),
-                false => return Err(char)
-            }
-        }
-    }
-    Ok(valid_result)
-}
-
-pub fn get_args() -> Vec<String> {
-    env::args().skip(1).collect::<Vec<String>>()
 }
