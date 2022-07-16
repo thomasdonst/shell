@@ -6,8 +6,7 @@ use shell::ast::Expr;
 use shell::interpreter::Interpreter;
 use shell::lexer::Lexer;
 use shell::parser::Parser;
-use shell::config::FOLDER_NAME;
-
+use shell::utils::{get_program_dir, parse};
 
 fn main() {
     let program_dir = get_program_dir();
@@ -15,17 +14,12 @@ fn main() {
     loop {
         display_prompt();
         let input = read_input();
-        let ast = parse_input(&input, &program_dir);
+        let ast = parse(&input, &program_dir);
         match &ast {
             Ok(expr) => interpreter.eval(expr),
             Err(err) => eprintln!("{}", err)
         };
     }
-}
-
-fn get_program_dir() -> String {
-    let prefix = env::current_dir().unwrap().display().to_string();
-    prefix + FOLDER_NAME
 }
 
 fn display_prompt() {
@@ -36,12 +30,6 @@ fn display_prompt() {
 
 fn read_input() -> String {
     let mut input = String::new();
-    let _ = stdin().read_line(&mut input);
+    stdin().read_line(&mut input).expect("Could not read input");
     input.trim().to_string()
-}
-
-fn parse_input(input: &str, program_dir: &str) -> Result<Expr, String> {
-    let lexer = Lexer::new(&input, program_dir);
-    let mut parser = Parser::new(lexer);
-    parser.parse()
 }
