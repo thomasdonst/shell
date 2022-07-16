@@ -1,6 +1,6 @@
 #![allow(warnings)]
 
-use shell::interpreter::{get_args, process_options, read_files, read_stdin};
+use shell::utils::{get_args, process_options, read_files};
 
 fn main() {
     let mut stdout = String::new();
