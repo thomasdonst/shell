@@ -8,6 +8,8 @@ pub enum Operator {
     Pipe,
     Next,
     NextIfSuccess,
+    LogicAnd,
+    LogicOr,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -19,4 +21,6 @@ pub enum Expr {
         stdout_redirect: Option<String>,
     },
     Binary(Box<Expr>, Operator, Box<Expr>),
+    If(Box<Expr>, Box<Expr>),
+    IfElse(Box<Expr>, Box<Expr>, Box<Expr>),
 }

@@ -3,7 +3,8 @@
 use std::fs::File;
 use std::iter::Peekable;
 use std::path::Path;
-use crate::ast::{Operator, Expr};
+
+use crate::ast::{Expr, Operator};
 use crate::lexer::Lexer;
 use crate::token::Token;
 use crate::utils::parse;
@@ -24,14 +25,14 @@ impl<'lexer> Parser<'lexer> {
     }
 
     pub fn parse(&mut self) -> Result<Expr, String> {
-        self.parse_binary(0)
+        self.parse_expression(0)
     }
 
     fn peek(&mut self) -> Option<&Token> {
         self.lexer.peek().take()
     }
 
-    fn parse_binary(&mut self, min_binding_power: u8) -> Result<Expr, String> {
+    fn parse_expression(&mut self, min_binding_power: u8) -> Result<Expr, String> {
         let mut lhs = self.parse_atom()?;
         loop {
             let op;
@@ -45,7 +46,7 @@ impl<'lexer> Parser<'lexer> {
                 break;
             }
             self.next();
-            let rhs = self.parse_binary(right_bp)?;
+            let rhs = self.parse_expression(right_bp)?;
             lhs = Expr::Binary(Box::new(lhs), op, Box::new(rhs));
         }
         Ok(lhs)
@@ -54,8 +55,23 @@ impl<'lexer> Parser<'lexer> {
     fn parse_atom(&mut self) -> Result<Expr, String> {
         match self.next() {
             Some(Token::Command(cmd_type)) => self.parse_command(&cmd_type),
-            Some(token) => Err(format!("Expected a command but found {}", token)),
-            None => Err("Expected a command but found nothing".to_string()),
+            Some(Token::If) => {
+                let cond = self.parse_expression(0)?;
+                self.expect(vec![Token::Then])?;
+                let then_expr = self.parse_expression(0)?;
+                if self.expect(vec![Token::Else, Token::DoubleSemicolon, Token::EOL])? == Token::Else {
+                    let else_expr = self.parse_expression(0)?;
+                    self.expect(vec![Token::DoubleSemicolon, Token::EOL])?;
+                    return Ok(Expr::IfElse(
+                        Box::new(cond),
+                        Box::new(then_expr),
+                        Box::new(else_expr),
+                    ));
+                }
+                Ok(Expr::If(Box::new(cond), Box::new(then_expr)))
+            }
+            Some(token) => Err(format!("Expected a command or if but found {}", token)),
+            None => Err("Expected a command or if but found nothing".to_string()),
         }
     }
 
@@ -63,7 +79,9 @@ impl<'lexer> Parser<'lexer> {
         match self.peek() {
             Some(Token::Semicolon) => Ok(Operator::Next),
             Some(Token::Pipe) => Ok(Operator::Pipe),
-            Some(Token::DoubleAmpersand) => Ok(Operator::NextIfSuccess),
+            Some(Token::Ampersand) => Ok(Operator::NextIfSuccess),
+            Some(Token::DoubleAmpersand) => Ok(Operator::LogicAnd),
+            Some(Token::DoublePipe) => Ok(Operator::LogicOr),
             _ => Err(())
         }
     }
@@ -72,6 +90,8 @@ impl<'lexer> Parser<'lexer> {
         match op {
             Operator::Next => (1, 2),
             Operator::NextIfSuccess => (3, 4),
+            Operator::LogicAnd => (3, 4),
+            Operator::LogicOr => (3, 4),
             Operator::Pipe => (4, 5),
         }
     }
@@ -121,5 +141,13 @@ impl<'lexer> Parser<'lexer> {
             return Err(format!("{} does not exists", filename));
         }
         Ok(filename.to_string())
+    }
+
+    fn expect(&mut self, should: Vec<Token>) -> Result<Token, String> {
+        match self.peek() {
+            Some(is) if should.iter().any(|should| is == should) => Ok(self.next().unwrap()),
+            Some(is) => Err(format!("Expected one of: {:?} but got: {:?}", should, is)),
+            None => Err("Unexpected end of input".to_string()),
+        }
     }
 }

@@ -2,6 +2,7 @@
 
 use std::env;
 use std::io::{Read, stdin, stdout, Write};
+
 use shell::ast::Expr;
 use shell::interpreter::Interpreter;
 use shell::lexer::Lexer;
@@ -14,7 +15,10 @@ fn main() {
     loop {
         display_prompt();
         let input = read_input();
+        //let mut lex = Lexer::new(&input, &program_dir);
+        //lex.get_tokens().iter().for_each(|t| println!("{:?}", t));
         let ast = parse(&input, &program_dir);
+        //println!("{:#?}", ast.expect("error")); // todo: delete
         match &ast {
             Ok(expr) => {
                 let (stderr, stdout) = interpreter.eval(expr);
@@ -35,5 +39,5 @@ fn display_prompt() {
 fn read_input() -> String {
     let mut input = String::new();
     stdin().read_line(&mut input).expect("Could not read input");
-    input.trim().to_string()
+    input.trim_start().to_string()
 }

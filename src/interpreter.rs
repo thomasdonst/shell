@@ -5,7 +5,8 @@ use std::fs::File;
 use std::io::Read;
 use std::path::Path;
 use std::process::{ChildStderr, ChildStdout, Command, exit, Stdio};
-use crate::ast::{Operator, Expr};
+
+use crate::ast::{Expr, Operator};
 use crate::utils::is_dir;
 
 pub struct Interpreter {
@@ -46,7 +47,7 @@ impl Interpreter {
         (self.error_result.clone(), self.output_result.clone())
     }
 
-    fn eval_expr(&mut self, node: &Expr) {
+    fn eval_expr(&mut self, node: &Expr){
         match node {
             Expr::Binary(lhs, Operator::Pipe, rhs) => {
                 self.eval_expr(lhs);
@@ -68,11 +69,63 @@ impl Interpreter {
                     self.process_result();
                 }
             }
+            Expr::Binary(lhs, Operator::LogicAnd, rhs) => { //TODO: can be done with global variable
+                self.eval_expr(lhs);
+                if let Some(mut stdout) = self.stdout.take() {
+                    let buffer = self.get_buffer(&mut stdout as &mut dyn Read);
+                    let left = buffer.unwrap().trim() == "true";
+                    if left {
+                        self.eval_expr(rhs);
+                        if let Some(mut stdout) = self.stdout.take() {
+                            let buffer = self.get_buffer(&mut stdout as &mut dyn Read);
+                            let right = buffer.unwrap().trim() == "true";
+                            if right {
+                                println!("true");
+                            }
+                        }
+                    }
+                }
+            }
+            Expr::Binary(lhs, Operator::LogicOr, rhs) => {
+                let mut left = false;
+                let mut right = false;
+                self.eval_expr(lhs);
+                if let Some(mut stdout) = self.stdout.take() {
+                    let buffer = self.get_buffer(&mut stdout as &mut dyn Read);
+                    left = buffer.unwrap().trim() == "true";
+                }
+                self.eval_expr(rhs);
+                if let Some(mut stdout) = self.stdout.take() {
+                    let buffer = self.get_buffer(&mut stdout as &mut dyn Read);
+                    right = buffer.unwrap().trim() == "true";
+                }
+                if left | right {
+                    println!("true");
+                }
+            }
             Expr::Cmd {
                 name: cmd_type, arguments,
                 stdin_redirect, stdout_redirect
             } => {
                 self.execute(cmd_type, arguments, stdin_redirect, stdout_redirect);
+            }
+            Expr::If(cond, then_expr) => {
+                self.eval_expr(cond);
+                if let Some(mut stdout) = self.stdout.take() {
+                    let buffer = self.get_buffer(&mut stdout as &mut dyn Read);
+                    let condition = buffer.unwrap().trim() == "true";
+                    if condition {
+                        self.eval_expr(then_expr);
+                    }
+                }
+            }
+            Expr::IfElse(cond, then_expr, else_expr) => {
+                self.eval_expr(cond);
+                if let Some(mut stdout) = self.stdout.take() {
+                    let buffer = self.get_buffer(&mut stdout as &mut dyn Read);
+                    let condition = buffer.unwrap().trim() == "true";
+                    self.eval_expr(if condition { then_expr } else { else_expr });
+                }
             }
         }
     }
