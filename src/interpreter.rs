@@ -1,22 +1,22 @@
 #![allow(warnings)]
 
-use std::{env, io};
-use std::fs::{File, OpenOptions};
-use std::io::{BufRead, Read, Write};
+use std::env;
+use std::fs::File;
+use std::io::Read;
 use std::path::Path;
-use std::process::{ChildStderr, ChildStdout, Command, ExitCode, ExitStatus, Stdio};
-use std::time::Duration;
+use std::process::{ChildStderr, ChildStdout, Command, exit, Stdio};
 use crate::ast::{Operator, Expr};
-use crate::token::Token;
 use crate::utils::is_dir;
 
 pub struct Interpreter {
     stderr: Option<ChildStderr>,
     stdout: Option<ChildStdout>,
-    exit_success: bool,
 
+    exit_success: bool,
     is_piped: bool,
-    // file: Option<File>,
+
+    output_result: Vec<String>,
+    error_result: Vec<String>,
 
     program_dir: String,
 }
@@ -26,68 +26,68 @@ impl Interpreter {
         Interpreter {
             stderr: None,
             stdout: None,
-            exit_success: false,
 
+            exit_success: false,
             is_piped: false,
-            // file: None,
+
+            output_result: vec![],
+            error_result: vec![],
 
             program_dir: program_path.to_string(),
         }
     }
 
-    pub fn eval(&mut self, ast: &Expr) {
-        self.eval_binary(ast);
-        self.print_result()
+    pub fn eval(&mut self, ast: &Expr) -> (Vec<String>, Vec<String>) {
+        self.output_result = vec![];
+        self.error_result = vec![];
+
+        self.eval_expr(ast);
+        self.process_result();
+        (self.error_result.clone(), self.output_result.clone())
     }
 
-    fn eval_binary(&mut self, node: &Expr) {
+    fn eval_expr(&mut self, node: &Expr) {
         match node {
             Expr::Binary(lhs, Operator::Pipe, rhs) => {
-                self.eval_binary(lhs);
+                self.eval_expr(lhs);
                 self.is_piped = true;
-                self.eval_binary(rhs);
+                self.eval_expr(rhs);
                 self.is_piped = false;
-                return;
             }
             Expr::Binary(lhs, Operator::Next, rhs) => {
-                self.eval_binary(lhs);
-                self.print_result();
-                self.eval_binary(rhs);
-                self.print_result();
+                self.eval_expr(lhs);
+                self.process_result();
+                self.eval_expr(rhs);
+                self.process_result();
             }
-            Expr::Binary(lhs, Operator::And, rhs) => {
-                self.eval_binary(lhs);
-                self.print_result();
-                if self.exit_success { self.eval_binary(rhs) }
-                self.print_result();
+            Expr::Binary(lhs, Operator::NextIfSuccess, rhs) => {
+                self.eval_expr(lhs);
+                self.process_result();
+                if self.exit_success {
+                    self.eval_expr(rhs);
+                    self.process_result();
+                }
             }
-            Expr::Cmd { program: cmd_type, arguments } => {
-                self.execute(cmd_type, arguments);
-            }
-            Expr::Binary(lhs, Operator::InputRedirect, rhs) => {
-                // todo: implement InputRedirect
-                println!("InputRedirect")
-            }
-            Expr::Binary(lhs, Operator::OutputRedirect, rhs) => {
-                // todo: implement OutputRedirect
-                println!("OutputRedirect")
-            }
-            Expr::Argument(arg) => {
-                // todo: handle if expression at this branch (maybe)
-                eprintln!("Expected a command")
+            Expr::Cmd {
+                name: cmd_type, arguments,
+                stdin_redirect, stdout_redirect
+            } => {
+                self.execute(cmd_type, arguments, stdin_redirect, stdout_redirect);
             }
         }
     }
 
-    fn execute(&mut self, cmd_type: &str, arguments: &Vec<String>) {
+    fn execute(&mut self, cmd_type: &str, arguments: &Vec<String>,
+               stdin_redirect: &Option<String>, stdout_redirect: &Option<String>) {
         match cmd_type {
-            "cd" => self.execute_cd(arguments),
-            "clear" => self.execute_clear(),
-            _ => self.execute_program(cmd_type, arguments)
+            "cd" => self.cd(arguments),
+            "clear" => self.clear(),
+            "exit" => self.exit(),
+            _ => self.execute_program(cmd_type, arguments, stdin_redirect, stdout_redirect)
         }
     }
 
-    fn execute_cd(&mut self, arguments: &Vec<String>) {
+    fn cd(&mut self, arguments: &Vec<String>) {
         if self.is_piped {
             self.stdout = None;
             self.stderr = None;
@@ -97,80 +97,116 @@ impl Interpreter {
         let directory = match arguments.last() {
             Some(dir) => dir,
             _ => {
-                eprintln!("Cd has no argument");
+                self.error_result.push("Cd has no argument".to_string());
                 return;
             }
         };
 
         if !is_dir(directory) {
-            eprintln!("{} is not a valid directory", directory);
+            self.error_result.push(format!("{} is not a valid directory", directory));
             return;
         }
 
         let path = Path::new(directory);
         match env::set_current_dir(path) {
             Ok(_) => (),
-            Err(_) => eprintln!("Could set working directory")
+            Err(_) => self.error_result.push("Could set working directory".to_string())
         }
 
         self.stdout = None;
         self.stderr = None;
     }
 
-    fn execute_clear(&mut self) {
-        print!("\x1b[2J\x1b[1;1H")
+    fn clear(&mut self) {
+        self.output_result.push("\x1b[2J\x1b[1;1H".to_string())
     }
 
-    fn execute_program(&mut self, program_name: &str, arguments: &Vec<String>) {
+    fn exit(&self) {
+        exit(0)
+    }
+
+    fn execute_program(&mut self, program_name: &str, arguments: &Vec<String>,
+                       stdin_redirect: &Option<String>, stdout_redirect: &Option<String>) {
         let program_path = self.program_dir.clone() + program_name;
         let mut command = Command::new(&program_path);
-
-        let program = command
+        command
             .args(arguments)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
 
         if self.is_piped {
-            let stdout = Stdio::from(self.stdout.take().unwrap());
-            program.stdin(stdout);
+            command = self.pipe_stdout_to_stdin(command)
+        }
+        if let Some(filename) = stdin_redirect {
+            command = self.redirect_file_to_stdin(command, filename)
+        }
+        if let Some(filename) = stdout_redirect {
+            command = self.redirect_stdout_to_file(command, filename)
         }
 
-        match program.spawn() {
-            Ok(mut c) => {
-                match c.wait() {
+        match command.spawn() {
+            Ok(mut child) => {
+                match child.wait() {
                     Ok(status) => self.exit_success = status.success(),
-                    Err(_) => eprintln!("command wasn't running")
+                    Err(_) => self.error_result.push("Command was not running".to_string())
                 }
-                self.stderr = c.stderr;
-                self.stdout = c.stdout;
+                self.stderr = child.stderr;
+                self.stdout = child.stdout;
             }
-            Err(e) => eprintln!("{}\r\n{}", e.to_string(), &program_path)
+            Err(e) => self.error_result.push(format!("{}\r\n{}", e.to_string(), &program_path))
         };
     }
 
-    fn print_result(&mut self) {
+    fn pipe_stdout_to_stdin(&mut self, mut program: Command) -> Command {
+        match self.stdout.take() {
+            Some(stdout) => {
+                let prev_stdout = Stdio::from(stdout);
+                program.stdin(prev_stdout);
+            }
+            None => { program.stdin(Stdio::null()); }
+        }
+        program
+    }
+
+    fn redirect_file_to_stdin(&mut self, mut program: Command, filename: &str) -> Command {
+        match File::open(filename) {
+            Ok(file) => { program.stdin(file); }
+            Err(_) => self.error_result.push(format!("Could not read file: {}\n", filename))
+        };
+        program
+    }
+
+    fn redirect_stdout_to_file(&mut self, mut program: Command, filename: &str) -> Command {
+        match File::create(filename) {
+            Ok(file) => { program.stdout(file); }
+            Err(_) => self.error_result.push(format!("Could not create file: {}\n", filename))
+        };
+        program
+    }
+
+    fn process_result(&mut self) {
         if let Some(mut stderr) = self.stderr.take() {
-            let stderr_buffer = self.get_buffer(&mut stderr as &mut dyn Read);
-            if !stderr_buffer.is_empty() {
-                eprint!("{}", stderr_buffer);
+            if let Ok(buffer) = self.get_buffer(&mut stderr as &mut dyn Read) {
+                self.error_result.push(buffer)
             }
         }
         if let Some(mut stdout) = self.stdout.take() {
-            let stdout_buffer = self.get_buffer(&mut stdout as &mut dyn Read);
-            if !stdout_buffer.is_empty() {
-                print!("{}", stdout_buffer);
+            if let Ok(buffer) = self.get_buffer(&mut stdout as &mut dyn Read) {
+                self.output_result.push(buffer)
             }
         }
     }
 
-    fn get_buffer(&mut self, fd: &mut dyn Read) -> String {
+    fn get_buffer(&mut self, fd: &mut dyn Read) -> Result<String, ()> {
         let mut buffer = String::new();
-        let _ = fd.read_to_string(&mut buffer);
+        fd.read_to_string(&mut buffer).expect("Could not read buffer from file descriptor");
         if !buffer.is_empty() {
             if !buffer.ends_with("\n") {
                 buffer.push_str("\n")
             }
+            Ok(buffer)
+        } else {
+            Err(())
         }
-        buffer
     }
 }

@@ -1,11 +1,20 @@
 #![allow(warnings)]
 
+use std::fs::File;
 use shell::ast::{Expr, Operator};
 use shell::ast::Expr::{Binary, Cmd};
 use shell::utils::{get_program_dir, parse};
+use std::sync::Once;
 
-// NOTE: cat, echo, grep, fmt and seq should exist in the programs directory in order to pass this test.
-// NOTE: q should NOT exist in the programs directory ...
+// NOTE: cat, echo, grep, fmt and seq should exist in the programs directory
+
+static INIT: Once = Once::new();
+
+fn initialize() {
+    INIT.call_once(|| {
+        File::create("input.txt").expect("Can not create input.txt");
+    })
+}
 
 fn parse_input(input: &str) -> Result<Expr, String> {
     let program_dir = get_program_dir();
@@ -15,108 +24,146 @@ fn parse_input(input: &str) -> Result<Expr, String> {
 #[test]
 fn parse_commands_test() {
     let expected_ast = Cmd {
-        program: "cat".to_string(),
+        name: "cat".to_string(),
         arguments: vec!["./tests/files/tmp.txt".to_string()],
+        stdin_redirect: None,
+        stdout_redirect: None,
     };
     assert_eq!(parse_input("cat ./tests/files/tmp.txt").unwrap(), expected_ast);
 
     let expected_ast = Cmd {
-        program: "echo".to_string(),
+        name: "echo".to_string(),
         arguments: vec!["123".to_string(), "456\n".to_string(), "abc".to_string()],
+        stdin_redirect: None,
+        stdout_redirect: None,
     };
     assert_eq!(parse_input("echo 123 456\n abc").unwrap(), expected_ast);
 }
 
 #[test]
-fn parse_argument_test() {
-    let expected_ast = Expr::Argument("q".to_string());
-    assert_eq!(parse_input("q").unwrap(), expected_ast);
+fn parse_redirects_test() {
+    let expected_ast = Cmd {
+        name: "echo".to_string(),
+        arguments: vec!["123".to_string(), "456\n".to_string(), "abc".to_string()],
+        stdin_redirect: None,
+        stdout_redirect: None,
+    };
+    assert_eq!(parse_input("echo 123 456\n abc").unwrap(), expected_ast);
 }
 
 #[test]
 fn parse_binary_test() {
     let expected_ast = Binary(
         Box::new(Cmd {
-            program: "cat".to_string(),
+            name: "cat".to_string(),
             arguments: vec!["./tests/files/tmp.txt".to_string()],
+            stdin_redirect: None,
+            stdout_redirect: None,
         }),
         Operator::Pipe,
         Box::new(Cmd {
-            program: "grep".to_string(),
+            name: "grep".to_string(),
             arguments: vec!["1".to_string()],
+            stdin_redirect: None,
+            stdout_redirect: None,
         }),
     );
     assert_eq!(parse_input("cat ./tests/files/tmp.txt | grep 1").unwrap(), expected_ast);
 }
 
 #[test]
-fn parse_complex_binaries_test() {
+fn parse_complex_binary_test() {
+    initialize();
     let expected_ast = Binary(
         Box::new(Binary(
             Box::new(Binary(
                 Box::new(Cmd {
-                    program: "cat".to_string(),
-                    arguments: vec!["./f".to_string()],
-                }),
-                Operator::Pipe,
-                Box::new(Cmd {
-                    program: "fmt".to_string(),
-                    arguments: vec![],
-                }),
-            )),
-            Operator::And,
-            Box::new(Cmd {
-                program: "echo".to_string(),
-                arguments: vec!["ok".to_string()],
-            }),
-        )),
-        Operator::Next,
-        Box::new(Cmd {
-            program: "echo".to_string(),
-            arguments: vec!["next".to_string()],
-        }),
-    );
-    assert_eq!(parse_input("cat ./f | fmt && echo ok ; echo next").unwrap(), expected_ast);
-
-
-    let expected_ast = Binary(
-        Box::new(Binary(
-            Box::new(Binary(
-                Box::new(Cmd {
-                    program: "echo".to_string(),
+                    name: "echo".to_string(),
                     arguments: vec!["123".to_string()],
+                    stdin_redirect: None,
+                    stdout_redirect: None,
                 }),
-                Operator::And,
+                Operator::NextIfSuccess,
                 Box::new(Binary(
                     Box::new(Binary(
                         Box::new(Cmd {
-                            program: "echo".to_string(),
+                            name: "echo".to_string(),
                             arguments: vec!["456".to_string()],
+                            stdin_redirect: None,
+                            stdout_redirect: None,
                         }),
                         Operator::Pipe,
                         Box::new(Cmd {
-                            program: "grep".to_string(),
+                            name: "grep".to_string(),
                             arguments: vec!["4".to_string()],
+                            stdin_redirect: None,
+                            stdout_redirect: None,
                         }),
                     )),
                     Operator::Pipe,
                     Box::new(Cmd {
-                        program: "fmt".to_string(),
+                        name: "fmt".to_string(),
                         arguments: vec![],
+                        stdin_redirect: None,
+                        stdout_redirect: None,
                     }),
                 )),
             )),
-            Operator::And,
+            Operator::NextIfSuccess,
             Box::new(Cmd {
-                program: "seq".to_string(),
+                name: "seq".to_string(),
                 arguments: vec!["3".to_string()],
+                stdin_redirect: None,
+                stdout_redirect: None,
             }),
         )),
         Operator::Next,
         Box::new(Cmd {
-            program: "echo".to_string(),
+            name: "echo".to_string(),
             arguments: vec![],
+            stdin_redirect: None,
+            stdout_redirect: None,
         }),
     );
     assert_eq!(parse_input("echo 123 && echo 456 | grep 4 | fmt && seq 3 ; echo").unwrap(), expected_ast);
 }
+
+#[test]
+fn parse_complex_binary_with_redirects_test() {
+    initialize();
+    let expected_ast = Binary(
+        Box::new(Binary(
+            Box::new(Binary(
+                Box::new(Cmd {
+                    name: "cat".to_string(),
+                    arguments: vec!["./f".to_string()],
+                    stdin_redirect: Some("input.txt".to_string()),
+                    stdout_redirect: None,
+                }),
+                Operator::Pipe,
+                Box::new(Cmd {
+                    name: "fmt".to_string(),
+                    arguments: vec![],
+                    stdin_redirect: None,
+                    stdout_redirect: None,
+                }),
+            )),
+            Operator::NextIfSuccess,
+            Box::new(Cmd {
+                name: "echo".to_string(),
+                arguments: vec!["ok".to_string()],
+                stdin_redirect: None,
+                stdout_redirect: None,
+            }),
+        )),
+        Operator::Next,
+        Box::new(Cmd {
+            name: "echo".to_string(),
+            arguments: vec!["next".to_string()],
+            stdin_redirect: None,
+            stdout_redirect: Some("a.txt".to_string()),
+        }),
+    );
+    assert_eq!(parse_input("cat ./f < input.txt | fmt && echo ok ; echo next > a.txt").unwrap(), expected_ast);
+}
+

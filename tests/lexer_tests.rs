@@ -1,9 +1,8 @@
-use shell::config::FOLDER_NAME;
 use shell::lexer::Lexer;
 use shell::token::Token;
 use shell::utils::get_program_dir;
 
-// NOTE: cat, grep, seq and echo should exist in the programs directory in order to pass the tests
+// NOTE: cat, grep, seq and echo should exist in the programs directory
 
 fn get_tokens(input: &str) -> Vec<Token> {
     let program_dir = get_program_dir();
@@ -14,8 +13,10 @@ fn get_tokens(input: &str) -> Vec<Token> {
 #[test]
 fn lex_symbols_test() {
     let expected_tokens = vec![
-        Token::Great,
-        Token::Less,
+        Token::OutputRedirect("".to_string()),
+        Token::InputRedirect("".to_string()),
+        Token::OutputRedirect("output".to_string()),
+        Token::InputRedirect("input".to_string()),
         Token::Ampersand,
         Token::DoubleAmpersand,
         Token::Pipe,
@@ -23,8 +24,8 @@ fn lex_symbols_test() {
         Token::Quote,
         Token::Semicolon,
     ];
-    assert_eq!(get_tokens("> < & && | = \" ;"), expected_tokens);
-    assert_eq!(get_tokens("><& &&|=\";"), expected_tokens);
+    assert_eq!(get_tokens("> < >output < input & && | = \" ;"), expected_tokens);
+    assert_eq!(get_tokens("><>output<input& &&|=\";"), expected_tokens);
 }
 
 #[test]
@@ -39,9 +40,9 @@ fn lex_arguments_test() {
 #[test]
 fn lex_hyphens_test() {
     let expected_tokens = vec![
-        Token::Hyphen("a".to_string()),
-        Token::Hyphen("abc".to_string()),
-        Token::Hyphen("".to_string()),
+        Token::Hyphen("-a".to_string()),
+        Token::Hyphen("-abc".to_string()),
+        Token::Hyphen("-".to_string()),
     ];
     assert_eq!(get_tokens("-a -abc-"), expected_tokens);
 }
@@ -49,9 +50,9 @@ fn lex_hyphens_test() {
 #[test]
 fn lex_double_hyphens_test() {
     let expected_tokens = vec![
-        Token::DoubleHyphen("option".to_string()),
-        Token::DoubleHyphen("".to_string()),
-        Token::DoubleHyphen("option2".to_string()),
+        Token::DoubleHyphen("--option".to_string()),
+        Token::DoubleHyphen("--".to_string()),
+        Token::DoubleHyphen("--option2".to_string()),
     ];
     assert_eq!(get_tokens("--option-- --option2"), expected_tokens);
 }

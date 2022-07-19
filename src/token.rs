@@ -1,12 +1,9 @@
 #![allow(warnings)]
 
 use std::fmt;
-use std::fs::File;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Token {
-    Great,
-    Less,
     Ampersand,
     DoubleAmpersand,
     Pipe,
@@ -14,6 +11,8 @@ pub enum Token {
     Quote,
     Semicolon,
 
+    InputRedirect(String),
+    OutputRedirect(String),
     Command(String),
     Argument(String),
     Hyphen(String),

@@ -1,24 +1,22 @@
 #![allow(warnings)]
 
-use std::fmt;
 use std::fs::File;
-use std::str::FromStr;
+use std::process::Stdio;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Operator {
     Pipe,
     Next,
-    And,
-    InputRedirect,
-    OutputRedirect,
+    NextIfSuccess,
 }
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Expr {
     Cmd {
-        program: String,
+        name: String,
         arguments: Vec<String>,
+        stdin_redirect: Option<String>,
+        stdout_redirect: Option<String>,
     },
-    Argument(String),
     Binary(Box<Expr>, Operator, Box<Expr>),
 }

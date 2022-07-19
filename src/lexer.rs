@@ -68,9 +68,17 @@ impl<'input> Iterator for Lexer<'input> {
 
     fn next(&mut self) -> Option<Token> {
         let token = match self.next_char() {
-            Some('>') => Some(Token::Great),
+            Some('>') => {
+                self.consume_whitespaces();
+                let res = self.next_word("".to_string());
+                Some(Token::OutputRedirect(res))
+            }
 
-            Some('<') => Some(Token::Less),
+            Some('<') => {
+                self.consume_whitespaces();
+                let res = self.next_word("".to_string());
+                Some(Token::InputRedirect(res))
+            }
 
             Some('&') =>
                 if self.peek() == Some('&') {
@@ -96,10 +104,10 @@ impl<'input> Iterator for Lexer<'input> {
             Some('-') => {
                 if self.peek() == Some('-') {
                     self.next_char();
-                    let option = self.next_word("".to_string());
+                    let option = self.next_word("--".to_string());
                     Some(Token::DoubleHyphen(option))
                 } else {
-                    let option = self.next_word("".to_string());
+                    let option = self.next_word("-".to_string());
                     Some(Token::Hyphen(option))
                 }
             }
@@ -108,7 +116,7 @@ impl<'input> Iterator for Lexer<'input> {
                 let word = self.next_word(c.to_string()).to_lowercase();
                 let program_path = self.program_dir.clone() + &word + ".exe";
 
-                let built_in_shell = ["cd", "clear"].contains(&word.as_str());
+                let built_in_shell = ["cd", "clear", "exit"].contains(&word.as_str());
                 let found_program = Path::new(&program_path).is_file();
                 let program_exists = found_program || built_in_shell;
 

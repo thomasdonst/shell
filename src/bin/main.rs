@@ -16,7 +16,11 @@ fn main() {
         let input = read_input();
         let ast = parse(&input, &program_dir);
         match &ast {
-            Ok(expr) => interpreter.eval(expr),
+            Ok(expr) => {
+                let (stderr, stdout) = interpreter.eval(expr);
+                stderr.iter().for_each(|x| print!("{}", x));
+                stdout.iter().for_each(|x| print!("{}", x));
+            },
             Err(err) => eprintln!("{}", err)
         };
     }
