@@ -46,7 +46,7 @@ impl<'input> Lexer<'input> {
     }
 
     fn is_word_member(&self, c: char) -> bool {
-        !matches!(c, ' ' | '>' | '<' | '&' | '|' | '=' | '"' | '$' | '-' | ';' | '\n')
+        !matches!(c, ' ' | '>' | '<' | '&' | '|' | '=' | '"' | '$' | '-' | ';' | '\r' | '\n')
     }
 
     fn peek(&mut self) -> Option<char> {
@@ -55,9 +55,7 @@ impl<'input> Lexer<'input> {
 
     fn consume_whitespaces(&mut self) {
         while let Some(c) = self.peek() {
-            if c == '\n' {
-                break;
-            } else if c.is_whitespace() {
+            if c == ' ' {
                 self.next_char();
             } else {
                 break;
@@ -131,7 +129,6 @@ impl<'input> Iterator for Lexer<'input> {
 
             Some(c) => Some({
                 let word = self.next_word(c.to_string()).to_lowercase();
-                let program_path = self.program_dir.clone() + &word + ".exe";
 
                 if word == "if" {
                     self.consume_whitespaces();
@@ -146,6 +143,7 @@ impl<'input> Iterator for Lexer<'input> {
                     return Some(Token::Else);
                 }
 
+                let program_path = self.program_dir.clone() + &word + ".exe";
                 let built_in_shell = ["cd", "clear", "exit"].contains(&word.as_str());
                 let found_program = Path::new(&program_path).is_file();
                 let program_exists = found_program || built_in_shell;

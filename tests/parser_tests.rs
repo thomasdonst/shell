@@ -33,22 +33,22 @@ fn parse_commands_test() {
 
     let expected_ast = Cmd {
         name: "echo".to_string(),
-        arguments: vec!["123".to_string(), "456\n".to_string(), "abc".to_string()],
+        arguments: vec!["123".to_string(), "456".to_string(), "abc".to_string()],
         stdin_redirect: None,
         stdout_redirect: None,
     };
-    assert_eq!(parse_input("echo 123 456\n abc").unwrap(), expected_ast);
+    assert_eq!(parse_input("echo 123 456 abc").unwrap(), expected_ast);
 }
 
 #[test]
 fn parse_redirects_test() {
     let expected_ast = Cmd {
         name: "echo".to_string(),
-        arguments: vec!["123".to_string(), "456\n".to_string(), "abc".to_string()],
+        arguments: vec!["123".to_string(), "456".to_string(), "abc".to_string()],
         stdin_redirect: None,
         stdout_redirect: None,
     };
-    assert_eq!(parse_input("echo 123 456\n abc").unwrap(), expected_ast);
+    assert_eq!(parse_input("echo 123 456 abc").unwrap(), expected_ast);
 }
 
 #[test]
@@ -125,7 +125,7 @@ fn parse_complex_binary_test() {
             stdout_redirect: None,
         }),
     );
-    assert_eq!(parse_input("echo 123 && echo 456 | grep 4 | fmt && seq 3 ; echo").unwrap(), expected_ast);
+    assert_eq!(parse_input("echo 123 & echo 456 | grep 4 | fmt & seq 3 ; echo").unwrap(), expected_ast);
 }
 
 #[test]
@@ -164,6 +164,6 @@ fn parse_complex_binary_with_redirects_test() {
             stdout_redirect: Some("a.txt".to_string()),
         }),
     );
-    assert_eq!(parse_input("cat ./f < input.txt | fmt && echo ok ; echo next > a.txt").unwrap(), expected_ast);
+    assert_eq!(parse_input("cat ./f < input.txt | fmt & echo ok ; echo next > a.txt").unwrap(), expected_ast);
 }
 

@@ -25,14 +25,14 @@ impl<'lexer> Parser<'lexer> {
     }
 
     pub fn parse(&mut self) -> Result<Expr, String> {
-        self.parse_expression(0)
+        self.parse_expr(0)
     }
 
     fn peek(&mut self) -> Option<&Token> {
         self.lexer.peek().take()
     }
 
-    fn parse_expression(&mut self, min_binding_power: u8) -> Result<Expr, String> {
+    fn parse_expr(&mut self, min_binding_power: u8) -> Result<Expr, String> {
         let mut lhs = self.parse_atom()?;
         loop {
             let op;
@@ -46,7 +46,7 @@ impl<'lexer> Parser<'lexer> {
                 break;
             }
             self.next();
-            let rhs = self.parse_expression(right_bp)?;
+            let rhs = self.parse_expr(right_bp)?;
             lhs = Expr::Binary(Box::new(lhs), op, Box::new(rhs));
         }
         Ok(lhs)
@@ -55,21 +55,7 @@ impl<'lexer> Parser<'lexer> {
     fn parse_atom(&mut self) -> Result<Expr, String> {
         match self.next() {
             Some(Token::Command(cmd_type)) => self.parse_command(&cmd_type),
-            Some(Token::If) => {
-                let cond = self.parse_expression(0)?;
-                self.expect(vec![Token::Then])?;
-                let then_expr = self.parse_expression(0)?;
-                if self.expect(vec![Token::Else, Token::DoubleSemicolon, Token::EOL])? == Token::Else {
-                    let else_expr = self.parse_expression(0)?;
-                    self.expect(vec![Token::DoubleSemicolon, Token::EOL])?;
-                    return Ok(Expr::IfElse(
-                        Box::new(cond),
-                        Box::new(then_expr),
-                        Box::new(else_expr),
-                    ));
-                }
-                Ok(Expr::If(Box::new(cond), Box::new(then_expr)))
-            }
+            Some(Token::If) => self.parse_if(),
             Some(token) => Err(format!("Expected a command or if but found {}", token)),
             None => Err("Expected a command or if but found nothing".to_string()),
         }
@@ -133,6 +119,24 @@ impl<'lexer> Parser<'lexer> {
         })
     }
 
+    fn parse_if(&mut self) -> Result<Expr, String> {
+        let cond = self.parse_expr(0)?;
+        self.expect(vec![Token::Then])?;
+        let then_expr = self.parse_expr(0)?;
+
+        if self.expect(vec![Token::Else, Token::DoubleSemicolon, Token::EOL])? == Token::Else {
+            let else_expr = self.parse_expr(0)?;
+            self.expect(vec![Token::DoubleSemicolon, Token::EOL])?;
+            Ok(Expr::IfElse(
+                Box::new(cond),
+                Box::new(then_expr),
+                Box::new(else_expr),
+            ))
+        } else {
+            Ok(Expr::If(Box::new(cond), Box::new(then_expr)))
+        }
+    }
+
     fn parse_redirect(filename: &str, should_exist: bool) -> Result<String, String> {
         if filename.is_empty() {
             return Err("Expected a file but found nothing".to_string());
@@ -146,7 +150,7 @@ impl<'lexer> Parser<'lexer> {
     fn expect(&mut self, should: Vec<Token>) -> Result<Token, String> {
         match self.peek() {
             Some(is) if should.iter().any(|should| is == should) => Ok(self.next().unwrap()),
-            Some(is) => Err(format!("Expected one of: {:?} but got: {:?}", should, is)),
+            Some(is) => Err(format!("Expected one of: {:?} but found: {:?}", should, is)),
             None => Err("Unexpected end of input".to_string()),
         }
     }

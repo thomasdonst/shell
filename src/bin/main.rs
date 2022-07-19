@@ -15,10 +15,7 @@ fn main() {
     loop {
         display_prompt();
         let input = read_input();
-        //let mut lex = Lexer::new(&input, &program_dir);
-        //lex.get_tokens().iter().for_each(|t| println!("{:?}", t));
         let ast = parse(&input, &program_dir);
-        //println!("{:#?}", ast.expect("error")); // todo: delete
         match &ast {
             Ok(expr) => {
                 let (stderr, stdout) = interpreter.eval(expr);

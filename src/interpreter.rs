@@ -47,7 +47,7 @@ impl Interpreter {
         (self.error_result.clone(), self.output_result.clone())
     }
 
-    fn eval_expr(&mut self, node: &Expr){
+    fn eval_expr(&mut self, node: &Expr) {
         match node {
             Expr::Binary(lhs, Operator::Pipe, rhs) => {
                 self.eval_expr(lhs);
@@ -103,12 +103,6 @@ impl Interpreter {
                     println!("true");
                 }
             }
-            Expr::Cmd {
-                name: cmd_type, arguments,
-                stdin_redirect, stdout_redirect
-            } => {
-                self.execute(cmd_type, arguments, stdin_redirect, stdout_redirect);
-            }
             Expr::If(cond, then_expr) => {
                 self.eval_expr(cond);
                 if let Some(mut stdout) = self.stdout.take() {
@@ -126,6 +120,12 @@ impl Interpreter {
                     let condition = buffer.unwrap().trim() == "true";
                     self.eval_expr(if condition { then_expr } else { else_expr });
                 }
+            }
+            Expr::Cmd {
+                name: cmd_type, arguments,
+                stdin_redirect, stdout_redirect
+            } => {
+                self.execute(cmd_type, arguments, stdin_redirect, stdout_redirect);
             }
         }
     }
