@@ -2,6 +2,7 @@
 
 use std::fs::File;
 use std::iter::Peekable;
+use std::ops::Deref;
 use std::path::Path;
 
 use crate::ast::{Expr, Operator};
@@ -149,7 +150,8 @@ impl<'lexer> Parser<'lexer> {
 
     fn expect(&mut self, should: Vec<Token>) -> Result<Token, String> {
         match self.peek() {
-            Some(is) if should.iter().any(|should| is == should) => Ok(self.next().unwrap()),
+            Some(is) if should.iter().any(|should| is == should) && is != &Token::EOL => Ok(self.next().unwrap()),
+            Some(is) if should.iter().any(|should| is == should) && is == &Token::EOL => Ok(self.peek().cloned().unwrap()),
             Some(is) => Err(format!("Expected one of: {:?} but found: {:?}", should, is)),
             None => Err("Unexpected end of input".to_string()),
         }
