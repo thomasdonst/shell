@@ -97,10 +97,6 @@ impl<'input> Iterator for Lexer<'input> {
                     Some(Token::Pipe)
                 }
 
-            Some('=') => Some(Token::Equal),
-
-            Some('"') => Some(Token::Quote),
-
             Some(';') =>
                 if self.peek() == Some(';') {
                     self.input.next();

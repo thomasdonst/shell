@@ -8,8 +8,6 @@ pub enum Token {
     DoubleAmpersand,
     Pipe,
     DoublePipe,
-    Equal,
-    Quote,
     Semicolon,
     DoubleSemicolon,
     If,
