@@ -7,6 +7,13 @@ use crate::config::FOLDER_NAME;
 use crate::lexer::Lexer;
 use crate::parser::Parser;
 
+pub fn eval_cond(str: &str) -> bool {
+    match str.to_lowercase().trim() {
+        "true" => true,
+        _ => false
+    }
+}
+
 pub fn get_program_dir() -> String {
     let prefix = env::current_dir().unwrap().display().to_string();
     prefix + FOLDER_NAME

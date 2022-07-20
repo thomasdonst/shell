@@ -7,7 +7,7 @@ use std::path::Path;
 use std::process::{ChildStderr, ChildStdout, Command, exit, Stdio};
 
 use crate::ast::{Expr, Operator};
-use crate::utils::is_dir;
+use crate::utils::{eval_cond, is_dir};
 
 pub struct Interpreter {
     stderr: Option<ChildStderr>,
@@ -69,68 +69,22 @@ impl Interpreter {
                     self.process_result();
                 }
             }
-            Expr::Binary(lhs, Operator::LogicAnd, rhs) => {
-                self.eval_expr(lhs);
-                self.process_result();
-
-                let buffer_left = self.output_result.pop().unwrap().clone();
-
-                if buffer_left.trim() == "true" {
-                    self.eval_expr(rhs);
-                    self.process_result();
-
-                    let buffer_right = self.output_result.pop().unwrap().clone();
-
-                    if buffer_right.trim() == "true" {
-                        self.output_result.push("true".to_string());
-                    } else {
-                        self.output_result.push("false".to_string());
-                    }
-                } else {
-                    self.output_result.push("false".to_string());
-                }
-            }
             Expr::Binary(lhs, Operator::LogicOr, rhs) => {
-                self.eval_expr(lhs);
-                self.process_result();
-
-                let buffer_left = self.output_result.pop().unwrap().clone();
-
-                let left = buffer_left.trim() == "true";
-
-                self.eval_expr(rhs);
-                self.process_result();
-
-                let mut buffer_right: String;
-                buffer_right = self.output_result.pop().unwrap().clone();
-
-                let mut right = false;
-                right = buffer_right.trim() == "true";
-
-                if left | right {
-                    self.output_result.push("true".to_string());
-                } else {
-                    self.output_result.push("false".to_string());
-                }
+                self.process_logic(lhs, rhs, |l, r| l || r)
+            }
+            Expr::Binary(lhs, Operator::LogicAnd, rhs) => {
+                self.process_logic(lhs, rhs, |l, r| l && r)
             }
             Expr::If(cond, then_expr) => {
                 self.eval_expr(cond);
                 self.process_result();
-
-                let buffer = self.output_result.pop().unwrap().clone();
-
-                let condition = buffer.trim() == "true";
-                if condition {
-                    self.eval_expr(then_expr);
-                }
+                let condition = eval_cond(&self.pop_output_result());
+                if condition { self.eval_expr(then_expr) }
             }
             Expr::IfElse(cond, then_expr, else_expr) => {
                 self.eval_expr(cond);
                 self.process_result();
-
-                let mut buffer = self.output_result.pop().unwrap().clone();
-
-                let condition = buffer.trim() == "true";
+                let condition = eval_cond(&self.pop_output_result());
                 self.eval_expr(if condition { then_expr } else { else_expr });
             }
             Expr::Cmd {
@@ -148,7 +102,6 @@ impl Interpreter {
                stdin_redirect: &Option<String>, stdout_redirect: &Option<String>) {
         match cmd_type {
             "cd" => self.cd(arguments),
-            "clear" => self.clear(),
             "exit" => self.exit(),
             _ => self.execute_program(cmd_type, arguments, stdin_redirect, stdout_redirect)
         }
@@ -160,32 +113,27 @@ impl Interpreter {
             self.stderr = None;
             return;
         }
-        // todo: implement options
         let directory = match arguments.last() {
             Some(dir) => dir,
             _ => {
-                self.error_result.push("Cd has no argument".to_string());
+                self.push_error_result("Cd has no argument".to_string());
                 return;
             }
         };
 
         if !is_dir(directory) {
-            self.error_result.push(format!("{} is not a valid directory", directory));
+            self.push_error_result(format!("{} is not a valid directory", directory));
             return;
         }
 
         let path = Path::new(directory);
         match env::set_current_dir(path) {
             Ok(_) => (),
-            Err(_) => self.error_result.push("Could set working directory".to_string())
+            Err(_) => self.push_error_result("Could set working directory".to_string())
         }
 
         self.stdout = None;
         self.stderr = None;
-    }
-
-    fn clear(&mut self) {
-        self.output_result.push("\x1b[2J\x1b[1;1H".to_string())
     }
 
     fn exit(&self) {
@@ -215,12 +163,12 @@ impl Interpreter {
             Ok(mut child) => {
                 match child.wait() {
                     Ok(status) => self.exit_success = status.success(),
-                    Err(_) => self.error_result.push("Command was not running".to_string())
+                    Err(_) => self.push_error_result("Command was not running".to_string())
                 }
                 self.stderr = child.stderr;
                 self.stdout = child.stdout;
             }
-            Err(e) => self.error_result.push(format!("{}\r\n{}", e.to_string(), &program_path))
+            Err(e) => self.push_error_result(format!("{}\r\n{}", e.to_string(), &program_path))
         };
     }
 
@@ -238,7 +186,7 @@ impl Interpreter {
     fn redirect_file_to_stdin(&mut self, mut program: Command, filename: &str) -> Command {
         match File::open(filename) {
             Ok(file) => { program.stdin(file); }
-            Err(_) => self.error_result.push(format!("Could not read file: {}\n", filename))
+            Err(_) => self.push_error_result(format!("Could not read file: {}\n", filename))
         };
         program
     }
@@ -246,7 +194,7 @@ impl Interpreter {
     fn redirect_stdout_to_file(&mut self, mut program: Command, filename: &str) -> Command {
         match File::create(filename) {
             Ok(file) => { program.stdout(file); }
-            Err(_) => self.error_result.push(format!("Could not create file: {}\n", filename))
+            Err(_) => self.push_error_result(format!("Could not create file: {}\n", filename))
         };
         program
     }
@@ -254,12 +202,12 @@ impl Interpreter {
     fn process_result(&mut self) {
         if let Some(mut stderr) = self.stderr.take() {
             if let Ok(buffer) = self.get_buffer(&mut stderr as &mut dyn Read) {
-                self.error_result.push(buffer)
+                self.push_error_result(buffer);
             }
         }
         if let Some(mut stdout) = self.stdout.take() {
             if let Ok(buffer) = self.get_buffer(&mut stdout as &mut dyn Read) {
-                self.output_result.push(buffer)
+                self.push_output_result(buffer);
             }
         }
     }
@@ -275,5 +223,41 @@ impl Interpreter {
         } else {
             Err(())
         }
+    }
+
+    fn pop_output_result(&mut self) -> String {
+        match self.output_result.pop() {
+            Some(entry) => entry.trim().to_string(),
+            None => "".to_string()
+        }
+    }
+
+    fn push_output_result(&mut self, buffer: String) {
+        if !buffer.ends_with("\n") {
+            self.output_result.push(buffer + "\n")
+        } else {
+            self.output_result.push(buffer)
+        }
+    }
+
+    fn push_error_result(&mut self, buffer: String) {
+        if !buffer.ends_with("\n") {
+            self.error_result.push(buffer + "\n")
+        } else {
+            self.error_result.push(buffer)
+        }
+    }
+
+    fn process_logic(&mut self, lhs: &Expr, rhs: &Expr, logic: fn(bool, bool) -> bool) {
+        self.eval_expr(lhs);
+        self.process_result();
+        let left = eval_cond(&self.pop_output_result());
+
+        self.eval_expr(rhs);
+        self.process_result();
+        let right = eval_cond(&self.pop_output_result());
+
+        let result = logic(left, right);
+        self.push_output_result(result.to_string());
     }
 }

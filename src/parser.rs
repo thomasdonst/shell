@@ -77,9 +77,9 @@ impl<'lexer> Parser<'lexer> {
         match op {
             Operator::Next => (1, 2),
             Operator::NextIfSuccess => (3, 4),
-            Operator::LogicAnd => (3, 4),
             Operator::LogicOr => (3, 4),
-            Operator::Pipe => (4, 5),
+            Operator::LogicAnd => (4, 5),
+            Operator::Pipe => (5, 6),
         }
     }
 
@@ -91,7 +91,7 @@ impl<'lexer> Parser<'lexer> {
         while let Some(x) = self.peek() {
             match x {
                 Token::Command(arg) | Token::Hyphen(arg) |
-                Token::DoubleHyphen(arg) | Token::Argument(arg) => {
+                Token::DoubleHyphen(arg) | Token::String(arg) => {
                     arguments.push(arg.to_string());
                     self.next();
                 }
@@ -150,8 +150,8 @@ impl<'lexer> Parser<'lexer> {
 
     fn expect(&mut self, should: Vec<Token>) -> Result<Token, String> {
         match self.peek() {
-            Some(is) if should.iter().any(|should| is == should) && is != &Token::EOL => Ok(self.next().unwrap()),
-            Some(is) if should.iter().any(|should| is == should) && is == &Token::EOL => Ok(self.peek().cloned().unwrap()),
+            Some(is) if should.iter().any(|should| is == should) =>
+                if is == &Token::EOL { Ok(Token::EOL) } else { Ok(self.next().unwrap()) }
             Some(is) => Err(format!("Expected one of: {:?} but found: {:?}", should, is)),
             None => Err("Unexpected end of input".to_string()),
         }

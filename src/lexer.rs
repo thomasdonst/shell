@@ -105,11 +105,6 @@ impl<'input> Iterator for Lexer<'input> {
                     Some(Token::Semicolon)
                 },
 
-            Some('$') => {
-                let res = self.next_word("".to_string());
-                Some(Token::EnvVariable(res))
-            }
-
             Some('-') => {
                 if self.peek() == Some('-') {
                     self.next_char();
@@ -122,6 +117,15 @@ impl<'input> Iterator for Lexer<'input> {
             }
 
             Some('\n') => Some(Token::EOL),
+
+            Some('\r') => {
+                if self.peek() == Some('\n') {
+                    self.next_char();
+                    Some(Token::EOL)
+                } else {
+                    Some(Token::EOL)
+                }
+            }
 
             Some(c) => Some({
                 let word = self.next_word(c.to_string()).to_lowercase();
@@ -140,11 +144,11 @@ impl<'input> Iterator for Lexer<'input> {
                 }
 
                 let program_path = self.program_dir.clone() + &word + ".exe";
-                let built_in_shell = ["cd", "clear", "exit"].contains(&word.as_str());
+                let built_in_shell = ["cd", "exit"].contains(&word.as_str());
                 let found_program = Path::new(&program_path).is_file();
                 let program_exists = found_program || built_in_shell;
 
-                if program_exists { Token::Command(word) } else { Token::Argument(word) }
+                if program_exists { Token::Command(word) } else { Token::String(word) }
             }),
 
             None => None

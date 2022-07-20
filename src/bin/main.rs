@@ -16,12 +16,13 @@ fn main() {
         display_prompt();
         let input = read_input();
         let ast = parse(&input, &program_dir);
+        // println!("{:#?}", ast); // todo: remove later
         match &ast {
             Ok(expr) => {
                 let (stderr, stdout) = interpreter.eval(expr);
-                stderr.iter().for_each(|x| print!("{}", x));
+                stderr.iter().for_each(|x| eprint!("{}", x));
                 stdout.iter().for_each(|x| print!("{}", x));
-            },
+            }
             Err(err) => eprintln!("{}", err)
         };
     }

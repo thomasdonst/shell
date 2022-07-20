@@ -2,7 +2,7 @@
 
 use std::fmt;
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum Token {
     Ampersand,
     DoubleAmpersand,
@@ -18,10 +18,13 @@ pub enum Token {
     InputRedirect(String),
     OutputRedirect(String),
     Command(String),
-    Argument(String),
     Hyphen(String),
     DoubleHyphen(String),
-    EnvVariable(String), // todo: implementation worth/ meaningful?
+
+    // Int(u32),
+    // Float(f32),
+    // Boolean(bool),
+    String(String), // previous name: Argument
 }
 
 impl fmt::Display for Token {
