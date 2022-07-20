@@ -80,34 +80,50 @@ impl Interpreter {
                             let buffer = self.get_buffer(&mut stdout as &mut dyn Read);
                             let right = buffer.unwrap().trim() == "true";
                             if right {
-                                println!("true");
+                                self.output_result.push("true".to_string());
+                            } else {
+                                self.output_result.push("false".to_string());
                             }
                         }
                     }
                 }
             }
             Expr::Binary(lhs, Operator::LogicOr, rhs) => {
+                let mut buffer_left: String;
+                let mut buffer_right: String;
                 let mut left = false;
                 let mut right = false;
                 self.eval_expr(lhs);
                 if let Some(mut stdout) = self.stdout.take() {
-                    let buffer = self.get_buffer(&mut stdout as &mut dyn Read);
-                    left = buffer.unwrap().trim() == "true";
+                    buffer_left = self.get_buffer(&mut stdout as &mut dyn Read).unwrap();
+                } else {
+                    buffer_left = self.output_result.last().unwrap().clone();
                 }
+                left = buffer_left.trim() == "true";
+
                 self.eval_expr(rhs);
                 if let Some(mut stdout) = self.stdout.take() {
-                    let buffer = self.get_buffer(&mut stdout as &mut dyn Read);
-                    right = buffer.unwrap().trim() == "true";
+                    buffer_right = self.get_buffer(&mut stdout as &mut dyn Read).unwrap();
+                } else {
+                    buffer_right = self.output_result.last().unwrap().clone();
                 }
+                right = buffer_right.trim() == "true";
                 if left | right {
-                    println!("true");
+                    self.output_result.push("true".to_string());
+                } else {
+                    self.output_result.push("false".to_string());
                 }
             }
             Expr::If(cond, then_expr) => {
                 self.eval_expr(cond);
                 if let Some(mut stdout) = self.stdout.take() {
-                    let buffer = self.get_buffer(&mut stdout as &mut dyn Read);
-                    let condition = buffer.unwrap().trim() == "true";
+                    let mut buffer: String;
+                    if let Some(mut stdout) = self.stdout.take() {
+                        buffer = self.get_buffer(&mut stdout as &mut dyn Read).unwrap();
+                    } else {
+                        buffer = self.output_result.last().unwrap().clone();
+                    }
+                    let condition = buffer.trim() == "true";
                     if condition {
                         self.eval_expr(then_expr);
                     }
@@ -115,11 +131,14 @@ impl Interpreter {
             }
             Expr::IfElse(cond, then_expr, else_expr) => {
                 self.eval_expr(cond);
+                let mut buffer: String;
                 if let Some(mut stdout) = self.stdout.take() {
-                    let buffer = self.get_buffer(&mut stdout as &mut dyn Read);
-                    let condition = buffer.unwrap().trim() == "true";
-                    self.eval_expr(if condition { then_expr } else { else_expr });
+                    buffer = self.get_buffer(&mut stdout as &mut dyn Read).unwrap();
+                } else {
+                    buffer = self.output_result.last().unwrap().clone();
                 }
+                let condition = buffer.trim() == "true";
+                self.eval_expr(if condition { then_expr } else { else_expr });
             }
             Expr::Cmd {
                 name: cmd_type, arguments,
