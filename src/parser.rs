@@ -1,5 +1,7 @@
 #![allow(warnings)]
 
+use std::env;
+use std::env::VarError;
 use std::fs::File;
 use std::iter::Peekable;
 use std::ops::Deref;
@@ -90,9 +92,18 @@ impl<'lexer> Parser<'lexer> {
 
         while let Some(x) = self.peek() {
             match x {
-                Token::Command(arg) | Token::Hyphen(arg) |
-                Token::DoubleHyphen(arg) | Token::Argument(arg) => {
+                Token::Command(arg) |
+                Token::Hyphen(arg) |
+                Token::DoubleHyphen(arg) |
+                Token::Argument(arg) => {
                     arguments.push(arg.to_string());
+                    self.next();
+                }
+                Token::EnvVariable(env) => {
+                    match env::var(env) {
+                        Ok(arg) => { arguments.push(arg); }
+                        Err(_) => return Err(format!("{} is not a valid environment variable", env))
+                    }
                     self.next();
                 }
                 Token::InputRedirect(filename) => {

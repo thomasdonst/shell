@@ -21,6 +21,7 @@ pub enum Token {
     Argument(String),
     Hyphen(String),
     DoubleHyphen(String),
+    EnvVariable(String),
 }
 
 impl fmt::Display for Token {

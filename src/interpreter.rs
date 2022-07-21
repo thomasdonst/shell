@@ -102,8 +102,9 @@ impl Interpreter {
     fn execute(&mut self, cmd_type: &str, arguments: &Vec<String>,
                stdin_redirect: &Option<String>, stdout_redirect: &Option<String>) {
         match cmd_type {
-            "cd" => self.cd(arguments),
+            "cd" => self.cd(&arguments),
             "exit" => self.exit(),
+            "set" => self.set(&arguments),
             _ => self.execute_program(cmd_type, arguments, stdin_redirect, stdout_redirect)
         }
     }
@@ -139,6 +140,22 @@ impl Interpreter {
 
     fn exit(&self) {
         exit(0)
+    }
+
+    fn set(&mut self, arguments: &Vec<String>) {
+        if arguments.len() < 2 {
+            self.push_error_result(format!("Expected at least 2 arguments but found {}", arguments.len()));
+            return;
+        }
+        let valid_key = arguments[0].chars().into_iter().all(|c| c.is_alphabetic() || c == '_');
+        if !valid_key {
+            self.push_error_result(format!("An environment variable can only contain \
+            alphabetic characters or _ but found {}", arguments[0]));
+            return;
+        }
+        let key = arguments[0].to_string();
+        let value = arguments[1..].join(" ");
+        env::set_var(key, value)
     }
 
     fn execute_program(&mut self, program_name: &str, arguments: &Vec<String>,
