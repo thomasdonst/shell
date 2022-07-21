@@ -18,13 +18,9 @@ pub enum Token {
     InputRedirect(String),
     OutputRedirect(String),
     Command(String),
+    Argument(String),
     Hyphen(String),
     DoubleHyphen(String),
-
-    // Int(u32),
-    // Float(f32),
-    // Boolean(bool),
-    String(String), // previous name: Argument
 }
 
 impl fmt::Display for Token {

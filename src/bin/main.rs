@@ -20,8 +20,8 @@ fn main() {
         match &ast {
             Ok(expr) => {
                 let (stderr, stdout) = interpreter.eval(expr);
-                stderr.iter().for_each(|x| eprint!("{}", x));
-                stdout.iter().for_each(|x| print!("{}", x));
+                stderr.iter().for_each(|x| eprintln!("{}", x));
+                stdout.iter().for_each(|x| println!("{}", x));
             }
             Err(err) => eprintln!("{}", err)
         };

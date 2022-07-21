@@ -91,7 +91,7 @@ impl<'lexer> Parser<'lexer> {
         while let Some(x) = self.peek() {
             match x {
                 Token::Command(arg) | Token::Hyphen(arg) |
-                Token::DoubleHyphen(arg) | Token::String(arg) => {
+                Token::DoubleHyphen(arg) | Token::Argument(arg) => {
                     arguments.push(arg.to_string());
                     self.next();
                 }

@@ -7,13 +7,13 @@ use std::path::Path;
 use std::process::{ChildStderr, ChildStdout, Command, exit, Stdio};
 
 use crate::ast::{Expr, Operator};
-use crate::utils::{eval_cond, is_dir};
+use crate::utils::is_dir;
 
 pub struct Interpreter {
     stderr: Option<ChildStderr>,
     stdout: Option<ChildStdout>,
 
-    exit_success: bool,
+    exit_success: Vec<bool>,
     is_piped: bool,
 
     output_result: Vec<String>,
@@ -28,7 +28,7 @@ impl Interpreter {
             stderr: None,
             stdout: None,
 
-            exit_success: false,
+            exit_success: vec![],
             is_piped: false,
 
             output_result: vec![],
@@ -39,6 +39,7 @@ impl Interpreter {
     }
 
     pub fn eval(&mut self, ast: &Expr) -> (Vec<String>, Vec<String>) {
+        self.exit_success = vec![];
         self.output_result = vec![];
         self.error_result = vec![];
 
@@ -64,7 +65,7 @@ impl Interpreter {
             Expr::Binary(lhs, Operator::NextIfSuccess, rhs) => {
                 self.eval_expr(lhs);
                 self.process_result();
-                if self.exit_success {
+                if *self.exit_success.last().unwrap_or(&false) {
                     self.eval_expr(rhs);
                     self.process_result();
                 }
@@ -78,13 +79,13 @@ impl Interpreter {
             Expr::If(cond, then_expr) => {
                 self.eval_expr(cond);
                 self.process_result();
-                let condition = eval_cond(&self.pop_output_result());
+                let condition = self.exit_success.pop().unwrap_or(false);
                 if condition { self.eval_expr(then_expr) }
             }
             Expr::IfElse(cond, then_expr, else_expr) => {
                 self.eval_expr(cond);
                 self.process_result();
-                let condition = eval_cond(&self.pop_output_result());
+                let condition = self.exit_success.pop().unwrap_or(false);
                 self.eval_expr(if condition { then_expr } else { else_expr });
             }
             Expr::Cmd {
@@ -162,7 +163,9 @@ impl Interpreter {
         match command.spawn() {
             Ok(mut child) => {
                 match child.wait() {
-                    Ok(status) => self.exit_success = status.success(),
+                    Ok(status) => {
+                        self.exit_success.push(status.success())
+                    }
                     Err(_) => self.push_error_result("Command was not running".to_string())
                 }
                 self.stderr = child.stderr;
@@ -215,49 +218,26 @@ impl Interpreter {
     fn get_buffer(&mut self, fd: &mut dyn Read) -> Result<String, ()> {
         let mut buffer = String::new();
         fd.read_to_string(&mut buffer).expect("Could not read buffer from file descriptor");
-        if !buffer.is_empty() {
-            if !buffer.ends_with("\n") {
-                buffer.push_str("\n")
-            }
-            Ok(buffer)
-        } else {
-            Err(())
-        }
-    }
-
-    fn pop_output_result(&mut self) -> String {
-        match self.output_result.pop() {
-            Some(entry) => entry.trim().to_string(),
-            None => "".to_string()
-        }
+        if !buffer.is_empty() { Ok(buffer) } else { Err(()) }
     }
 
     fn push_output_result(&mut self, buffer: String) {
-        if !buffer.ends_with("\n") {
-            self.output_result.push(buffer + "\n")
-        } else {
-            self.output_result.push(buffer)
-        }
+        self.output_result.push(buffer.trim().to_string())
     }
 
     fn push_error_result(&mut self, buffer: String) {
-        if !buffer.ends_with("\n") {
-            self.error_result.push(buffer + "\n")
-        } else {
-            self.error_result.push(buffer)
-        }
+        self.error_result.push(buffer.trim().to_string())
     }
 
     fn process_logic(&mut self, lhs: &Expr, rhs: &Expr, logic: fn(bool, bool) -> bool) {
         self.eval_expr(lhs);
         self.process_result();
-        let left = eval_cond(&self.pop_output_result());
+        let left = self.exit_success.pop().unwrap_or(false);
 
         self.eval_expr(rhs);
         self.process_result();
-        let right = eval_cond(&self.pop_output_result());
+        let right = self.exit_success.pop().unwrap_or(false);
 
-        let result = logic(left, right);
-        self.push_output_result(result.to_string());
+        self.exit_success.push(logic(left, right));
     }
 }

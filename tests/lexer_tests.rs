@@ -29,8 +29,8 @@ fn lex_symbols_test() {
 #[test]
 fn lex_arguments_test() {
     let expected_tokens = vec![
-        Token::String("only".to_string()),
-        Token::String("arguments".to_string()),
+        Token::Argument("only".to_string()),
+        Token::Argument("arguments".to_string()),
     ];
     assert_eq!(get_tokens("Only arguments"), expected_tokens);
 }
@@ -68,16 +68,16 @@ fn lex_builtin_commands_test() {
 fn lex_complex_command_test() {
     let expected_tokens = vec![
         Token::Command("cat".to_string()),
-        Token::String("a.txt".to_string()),
+        Token::Argument("a.txt".to_string()),
         Token::Pipe,
         Token::Command("grep".to_string()),
-        Token::String("h".to_string()),
+        Token::Argument("h".to_string()),
         Token::DoubleAmpersand,
         Token::Command("seq".to_string()),
-        Token::String("3".to_string()),
+        Token::Argument("3".to_string()),
         Token::Semicolon,
         Token::Command("echo".to_string()),
-        Token::String("hello".to_string()),
+        Token::Argument("hello".to_string()),
     ];
     assert_eq!(get_tokens("cat a.txt | grep h &&seq 3 ; echo hello"), expected_tokens);
 }

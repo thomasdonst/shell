@@ -148,7 +148,7 @@ impl<'input> Iterator for Lexer<'input> {
                 let found_program = Path::new(&program_path).is_file();
                 let program_exists = found_program || built_in_shell;
 
-                if program_exists { Token::Command(word) } else { Token::String(word) }
+                if program_exists { Token::Command(word) } else { Token::Argument(word) }
             }),
 
             None => None
