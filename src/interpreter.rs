@@ -105,6 +105,7 @@ impl Interpreter {
             "cd" => self.cd(&arguments),
             "exit" => self.exit(),
             "set" => self.set(&arguments),
+            "clear" => self.clear(),
             _ => self.execute_program(cmd_type, arguments, stdin_redirect, stdout_redirect)
         }
     }
@@ -156,6 +157,10 @@ impl Interpreter {
         let key = arguments[0].to_string();
         let value = arguments[1..].join(" ");
         env::set_var(key, value)
+    }
+
+    fn clear(&self) {
+        Command::new("powershell").arg("cls").output().unwrap();
     }
 
     fn execute_program(&mut self, program_name: &str, arguments: &Vec<String>,

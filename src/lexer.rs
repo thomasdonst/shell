@@ -149,7 +149,7 @@ impl<'input> Iterator for Lexer<'input> {
                 }
 
                 let program_path = self.program_dir.clone() + &word + ".exe";
-                let built_in_shell = ["cd", "exit", "set"].contains(&word.as_str());
+                let built_in_shell = ["cd", "exit", "set", "clear"].contains(&word.as_str());
                 let found_program = Path::new(&program_path).is_file();
                 let program_exists = found_program || built_in_shell;
 
