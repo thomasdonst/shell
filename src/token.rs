@@ -17,6 +17,7 @@ pub enum Token {
 
     InputRedirect(String),
     OutputRedirect(String),
+    ErrorRedirect(String),
     Command(String),
     Argument(String),
     Hyphen(String),

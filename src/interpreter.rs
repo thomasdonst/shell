@@ -1,13 +1,14 @@
 #![allow(warnings)]
 
 use std::env;
-use std::fs::File;
-use std::io::Read;
+use std::fs::{File, OpenOptions};
+use std::io::{Read, stdin, stdout, Write};
 use std::path::Path;
 use std::process::{ChildStderr, ChildStdout, Command, exit, Stdio};
 
-use crate::ast::{Expr, Operator};
+use crate::ast::{Expr, Operator, Redirect};
 use crate::utils::is_dir;
+
 
 pub struct Interpreter {
     stderr: Option<ChildStderr>,
@@ -88,25 +89,19 @@ impl Interpreter {
                 let condition = self.exit_success.pop().unwrap_or(false);
                 self.eval_expr(if condition { then_expr } else { else_expr });
             }
-            Expr::Cmd {
-                name: cmd_type,
-                arguments,
-                stdin_redirect,
-                stdout_redirect,
-            } => {
-                self.execute(cmd_type, arguments, stdin_redirect, stdout_redirect);
+            Expr::Cmd { name: cmd_type, arguments, redirect } => {
+                self.execute(cmd_type, arguments, &redirect);
             }
         }
     }
 
-    fn execute(&mut self, cmd_type: &str, arguments: &Vec<String>,
-               stdin_redirect: &Option<String>, stdout_redirect: &Option<String>) {
+    fn execute(&mut self, cmd_type: &str, arguments: &Vec<String>, redirect: &Redirect) {
         match cmd_type {
             "cd" => self.cd(&arguments),
             "exit" => self.exit(),
             "set" => self.set(&arguments),
             "clear" => self.clear(),
-            _ => self.execute_program(cmd_type, arguments, stdin_redirect, stdout_redirect)
+            _ => self.execute_command(cmd_type, arguments, redirect)
         }
     }
 
@@ -163,8 +158,7 @@ impl Interpreter {
         Command::new("powershell").arg("cls").output().unwrap();
     }
 
-    fn execute_program(&mut self, program_name: &str, arguments: &Vec<String>,
-                       stdin_redirect: &Option<String>, stdout_redirect: &Option<String>) {
+    fn execute_command(&mut self, program_name: &str, arguments: &Vec<String>, redirect: &Redirect) {
         let program_path = self.program_dir.clone() + program_name;
         let mut command = Command::new(&program_path);
         command
@@ -173,13 +167,16 @@ impl Interpreter {
             .stderr(Stdio::piped());
 
         if self.is_piped {
-            command = self.pipe_stdout_to_stdin(command)
+            command = self.pipe_prev_stdout_to_stdin(command)
         }
-        if let Some(filename) = stdin_redirect {
+        if let Some(filename) = &redirect.stdin {
             command = self.redirect_file_to_stdin(command, filename)
         }
-        if let Some(filename) = stdout_redirect {
+        if let Some(filename) = &redirect.stdout {
             command = self.redirect_stdout_to_file(command, filename)
+        }
+        if let Some(filename) = &redirect.stderr {
+            command = self.redirect_stderr_to_file(command, filename)
         }
 
         match command.spawn() {
@@ -197,31 +194,56 @@ impl Interpreter {
         };
     }
 
-    fn pipe_stdout_to_stdin(&mut self, mut program: Command) -> Command {
+    fn pipe_prev_stdout_to_stdin(&mut self, mut command: Command) -> Command {
         match self.stdout.take() {
             Some(stdout) => {
                 let prev_stdout = Stdio::from(stdout);
-                program.stdin(prev_stdout);
+                command.stdin(prev_stdout);
             }
-            None => { program.stdin(Stdio::null()); }
+            None => { command.stdin(Stdio::null()); }
         }
-        program
+        command
     }
 
-    fn redirect_file_to_stdin(&mut self, mut program: Command, filename: &str) -> Command {
+    fn redirect_file_to_stdin(&mut self, mut command: Command, filename: &str) -> Command {
+        if filename == "/dev/null" {
+            command.stdin(Stdio::null());
+            return command;
+        }
+        if !Path::new(filename).is_file() {
+            self.push_error_result(format!("File does not exist: {}", filename));
+            command.stdin(Stdio::null());
+            return command;
+        }
         match File::open(filename) {
-            Ok(file) => { program.stdin(file); }
-            Err(_) => self.push_error_result(format!("Could not read file: {}\n", filename))
+            Ok(file) => { command.stdin(file); }
+            Err(_) => self.push_error_result(format!("Could not read file: {}", filename))
         };
-        program
+        command
     }
 
-    fn redirect_stdout_to_file(&mut self, mut program: Command, filename: &str) -> Command {
+    fn redirect_stdout_to_file(&mut self, mut command: Command, filename: &str) -> Command {
+        if filename == "/dev/null" {
+            command.stdout(Stdio::null());
+            return command;
+        }
         match File::create(filename) {
-            Ok(file) => { program.stdout(file); }
-            Err(_) => self.push_error_result(format!("Could not create file: {}\n", filename))
+            Ok(file) => { command.stdout(file); }
+            Err(e) => self.push_error_result(format!("Could not create file: {}\n{}", filename, e))
         };
-        program
+        command
+    }
+
+    fn redirect_stderr_to_file(&mut self, mut command: Command, filename: &str) -> Command {
+        if filename == "/dev/null" {
+            command.stderr(Stdio::null());
+            return command;
+        }
+        match File::create(filename) {
+            Ok(file) => { command.stderr(file); }
+            Err(_) => self.push_error_result(format!("Could not create file: {}", filename))
+        };
+        command
     }
 
     fn process_result(&mut self) {

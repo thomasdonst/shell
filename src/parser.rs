@@ -7,7 +7,7 @@ use std::iter::Peekable;
 use std::ops::Deref;
 use std::path::Path;
 
-use crate::ast::{Expr, Operator};
+use crate::ast::{Expr, Operator, Redirect};
 use crate::lexer::Lexer;
 use crate::token::Token;
 use crate::utils::parse;
@@ -87,8 +87,7 @@ impl<'lexer> Parser<'lexer> {
 
     fn parse_command(&mut self, cmd_type: &str) -> Result<Expr, String> {
         let mut arguments = Vec::new();
-        let mut stdin_redirect = None;
-        let mut stdout_redirect = None;
+        let mut redirect = Redirect::new(None, None, None);
 
         while let Some(x) = self.peek() {
             match x {
@@ -107,17 +106,24 @@ impl<'lexer> Parser<'lexer> {
                     self.next();
                 }
                 Token::InputRedirect(filename) => {
-                    if stdin_redirect.is_some() {
+                    if redirect.stdin.is_some() {
                         return Err("Only one input redirection per command is allowed".to_string());
                     }
-                    stdin_redirect = Some(Self::parse_redirect(filename, true)?);
+                    redirect.stdin = Some(Self::parse_redirect(filename)?);
                     self.next();
                 }
                 Token::OutputRedirect(filename) => {
-                    if stdout_redirect.is_some() {
+                    if redirect.stdout.is_some() {
                         return Err("Only one output redirection per command is allowed".to_string());
                     }
-                    stdout_redirect = Some(Self::parse_redirect(filename, false)?);
+                    redirect.stdout = Some(Self::parse_redirect(filename)?);
+                    self.next();
+                }
+                Token::ErrorRedirect(filename) => {
+                    if redirect.stderr.is_some() {
+                        return Err("Only one error redirection per command is allowed".to_string());
+                    }
+                    redirect.stderr = Some(Self::parse_redirect(filename)?);
                     self.next();
                 }
                 _ => break
@@ -126,8 +132,7 @@ impl<'lexer> Parser<'lexer> {
         Ok(Expr::Cmd {
             name: cmd_type.to_string(),
             arguments,
-            stdin_redirect,
-            stdout_redirect,
+            redirect,
         })
     }
 
@@ -149,12 +154,9 @@ impl<'lexer> Parser<'lexer> {
         }
     }
 
-    fn parse_redirect(filename: &str, should_exist: bool) -> Result<String, String> {
+    fn parse_redirect(filename: &str) -> Result<String, String> {
         if filename.is_empty() {
             return Err("Expected a file but found nothing".to_string());
-        }
-        if !Path::new(filename).is_file() && should_exist {
-            return Err(format!("{} does not exists", filename));
         }
         Ok(filename.to_string())
     }

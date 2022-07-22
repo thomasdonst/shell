@@ -69,21 +69,9 @@ impl<'input> Iterator for Lexer<'input> {
 
     fn next(&mut self) -> Option<Token> {
         let token = match self.next_char() {
-            Some('>') => {
-                self.consume_whitespaces();
-                let res = self.next_word("".to_string());
-                Some(Token::OutputRedirect(res))
-            }
-
-            Some('<') => {
-                self.consume_whitespaces();
-                let res = self.next_word("".to_string());
-                Some(Token::InputRedirect(res))
-            }
-
             Some('&') =>
                 if self.peek() == Some('&') {
-                    self.input.next();
+                    self.next_char();
                     Some(Token::DoubleAmpersand)
                 } else {
                     Some(Token::Ampersand)
@@ -91,7 +79,7 @@ impl<'input> Iterator for Lexer<'input> {
 
             Some('|') =>
                 if self.peek() == Some('|') {
-                    self.input.next();
+                    self.next_char();
                     Some(Token::DoublePipe)
                 } else {
                     Some(Token::Pipe)
@@ -99,7 +87,7 @@ impl<'input> Iterator for Lexer<'input> {
 
             Some(';') =>
                 if self.peek() == Some(';') {
-                    self.input.next();
+                    self.next_char();
                     Some(Token::DoubleSemicolon)
                 } else {
                     Some(Token::Semicolon)
@@ -130,6 +118,32 @@ impl<'input> Iterator for Lexer<'input> {
                 } else {
                     Some(Token::EOL)
                 }
+            }
+
+            Some('<') => {
+                self.consume_whitespaces();
+                let res = self.next_word("".to_string());
+                Some(Token::InputRedirect(res))
+            }
+
+            Some('>') => {
+                self.consume_whitespaces();
+                let res = self.next_word("".to_string());
+                Some(Token::OutputRedirect(res))
+            }
+
+            Some('1') if self.peek() == Some('>') => {
+                self.next_char();
+                self.consume_whitespaces();
+                let res = self.next_word("".to_string());
+                Some(Token::OutputRedirect(res))
+            }
+
+            Some('2') if self.peek() == Some('>') => {
+                self.next_char();
+                self.consume_whitespaces();
+                let res = self.next_word("".to_string());
+                Some(Token::ErrorRedirect(res))
             }
 
             Some(c) => Some({
