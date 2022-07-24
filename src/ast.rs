@@ -14,7 +14,11 @@ pub enum Operator {
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Expr {
-    Cmd { name: String, arguments: Vec<String>, redirect: Redirect },
+    Cmd {
+        name: String,
+        arguments: Vec<String>,
+        redirect: Redirect,
+    },
     Binary(Box<Expr>, Operator, Box<Expr>),
     If(Box<Expr>, Box<Expr>),
     IfElse(Box<Expr>, Box<Expr>, Box<Expr>),

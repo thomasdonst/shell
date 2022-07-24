@@ -13,8 +13,8 @@ use crate::utils::is_dir;
 pub struct Interpreter {
     stderr: Option<ChildStderr>,
     stdout: Option<ChildStdout>,
-
     exit_success: Vec<bool>,
+
     is_piped: bool,
 
     output_result: Vec<String>,
@@ -28,8 +28,8 @@ impl Interpreter {
         Interpreter {
             stderr: None,
             stdout: None,
-
             exit_success: vec![],
+
             is_piped: false,
 
             output_result: vec![],
@@ -106,11 +106,6 @@ impl Interpreter {
     }
 
     fn cd(&mut self, arguments: &Vec<String>) {
-        if self.is_piped {
-            self.stdout = None;
-            self.stderr = None;
-            return;
-        }
         let directory = match arguments.last() {
             Some(dir) => dir,
             _ => {
@@ -229,7 +224,7 @@ impl Interpreter {
         }
         match File::create(filename) {
             Ok(file) => { command.stdout(file); }
-            Err(e) => self.push_error_result(format!("Could not create file: {}\n{}", filename, e))
+            Err(_) => self.push_error_result(format!("Could not create file: {}", filename))
         };
         command
     }
