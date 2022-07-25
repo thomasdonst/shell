@@ -1,14 +1,10 @@
-#![allow(warnings)]
-
 use std::env;
-use std::fs::{File, OpenOptions};
-use std::io::{Read, stdin, stdout, Write};
+use std::fs::File;
+use std::io::Read;
 use std::path::Path;
 use std::process::{ChildStderr, ChildStdout, Command, exit, Stdio};
-
 use crate::ast::{Expr, Operator, Redirect};
 use crate::utils::is_dir;
-
 
 pub struct Interpreter {
     stderr: Option<ChildStderr>,

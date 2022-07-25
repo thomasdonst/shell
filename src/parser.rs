@@ -1,16 +1,9 @@
-#![allow(warnings)]
-
 use std::env;
-use std::env::VarError;
-use std::fs::File;
 use std::iter::Peekable;
-use std::ops::Deref;
-use std::path::Path;
 
 use crate::ast::{Expr, Operator, Redirect};
 use crate::lexer::Lexer;
 use crate::token::Token;
-use crate::utils::parse;
 
 pub struct Parser<'lexer> {
     lexer: Peekable<Lexer<'lexer>>,

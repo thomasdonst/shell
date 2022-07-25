@@ -1,10 +1,6 @@
-#![allow(warnings)]
-
-use std::env;
-use std::fs::OpenOptions;
 use std::iter::Peekable;
 use std::path::Path;
-use std::str::{Chars, FromStr};
+use std::str::Chars;
 
 use crate::token::Token;
 

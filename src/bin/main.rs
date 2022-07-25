@@ -1,12 +1,6 @@
-#![allow(warnings)]
-
 use std::env;
-use std::io::{Read, stdin, stdout, Write};
-
-use shell::ast::Expr;
+use std::io::{stdin, stdout, Write};
 use shell::interpreter::Interpreter;
-use shell::lexer::Lexer;
-use shell::parser::Parser;
 use shell::utils::{get_program_dir, parse};
 
 fn main() {
@@ -16,7 +10,6 @@ fn main() {
         display_prompt();
         let input = read_input();
         let ast = parse(&input, &program_dir);
-        // println!("{:#?}", ast); // todo: remove later
         match &ast {
             Ok(expr) => {
                 let (stderr, stdout) = interpreter.eval(expr);

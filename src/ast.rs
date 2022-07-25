@@ -1,8 +1,3 @@
-#![allow(warnings)]
-
-use std::fs::File;
-use std::process::Stdio;
-
 #[derive(Debug, PartialEq, Eq)]
 pub enum Operator {
     Pipe,

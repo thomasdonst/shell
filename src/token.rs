@@ -1,5 +1,3 @@
-#![allow(warnings)]
-
 use std::fmt;
 
 #[derive(Debug, PartialEq, Eq)]
